@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sakti Studio - Project Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+            cursor: default;
+        }
+        .app-view {
+            display: none;
+            animation: fadeIn 0.5s;
+            width: 100%;
+            justify-content: center;
+            align-items: center;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .row-item {
+             animation: fadeIn 0.3s;
+        }
+        .row-item.fade-out {
+            animation: fadeOut 0.3s forwards;
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: scaleY(1); }
+            to { opacity: 0; transform: scaleY(0.8); height: 0; margin: 0; padding: 0; border: 0;}
+        }
+        .active-view {
+            display: flex;
+        }
+        .btn-primary {
+            background-color: #2563eb;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #1d4ed8;
+        }
+        .btn-primary:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            transition: all 0.3s ease;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        #comparison-table-container {
+            display: none;
+            margin-top: 1.5rem;
+            animation: fadeIn 0.5s;
+        }
+        #loading-overlay, #delete-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: white;
+            font-size: 1.5rem;
+            flex-direction: column;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #fff;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideIn 0.3s ease-out, fadeOutToast 0.5s ease-in 2.5s forwards;
+        }
+        .toast.success { background-color: #059669; }
+        .toast.error { background-color: #dc2626; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOutToast { from { opacity: 1; } to { opacity: 0; } }
+
+        /* Light Theme */
+        body.light { background-color: #f3f4f6; color: #111827; }
+        .light .card { background-color: #ffffff; border: 1px solid #e5e7eb; }
+        .light .card:hover { border-color: #d1d5db; }
+        .light .input-field { background-color: #ffffff; border: 1px solid #d1d5db; color: #111827; }
+        .light .input-field:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
+        .light .btn-secondary { background-color: #e5e7eb; color: #374151; }
+        .light .btn-secondary:hover { background-color: #d1d5db; }
+        .light .glowing-border { border: 2px solid #2563eb; box-shadow: 0 0 15px 3px rgba(59, 130, 246, 0.6); }
+        .light .text-main { color: #111827; }
+        .light .text-subtle { color: #6b7280; }
+        .light .text-accent { color: #2563eb; }
+        .light .bg-subtle { background-color: #f9fafb; }
+
+        /* Dark Theme */
+        body.dark { background-color: #111827; color: #d1d5db; }
+        .dark .card { background-color: #1f2937; border: 1px solid #374151; }
+        .dark .card:hover { border-color: #4b5563; }
+        .dark .input-field { background-color: #374151; border: 1px solid #4b5563; color: #d1d5db; }
+        .dark .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
+        .dark .btn-secondary { background-color: #374151; color: #d1d5db; }
+        .dark .btn-secondary:hover { background-color: #4b5563; }
+        .dark .glowing-border { border: 2px solid #93c5fd; box-shadow: 0 0 15px 3px rgba(96, 165, 250, 0.7); }
+        .dark .text-main { color: #f9fafb; }
+        .dark .text-subtle { color: #9ca3af; }
+        .dark .text-accent { color: #60a5fa; }
+        .dark .bg-subtle { background-color: #1f2937; }
+
+         @media print {
+            .no-print { display: none !important; }
+            body { background-color: #ffffff; color: #000000; }
+            .card { border: 1px solid #ccc; box-shadow: none; }
+         }
+    </style>
+</head>
+<body class="light">
+    <div id="toast-container"></div>
+    <button id="theme-toggle-btn" class="fixed top-4 right-4 z-50 p-2 rounded-full btn-secondary no-print">
+        <svg id="theme-icon-light" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+        <svg id="theme-icon-dark" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+    </button>
+
+    <div id="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <p id="loading-text">Memuat...</p>
+    </div>
+
+    <div id="main-dashboard" class="app-view w-full max-w-5xl mx-auto p-8 flex-col gap-8 active-view">
+        <h1 class="text-4xl font-bold text-center text-main">Sakti Studio</h1>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div id="initiation-card" class="card p-8 rounded-lg text-center hover:shadow-lg transition-shadow cursor-pointer">
+                <h2 class="text-2xl font-bold mb-2 text-accent">Project Initiation & Planing</h2>
+                <p class="text-subtle">Mulai kalkulasi dan perencanaan proyek baru.</p>
+            </div>
+            <div class="card p-8 rounded-lg text-center bg-gray-200 dark:bg-gray-800 cursor-not-allowed">
+                <h2 class="text-2xl font-bold mb-2">Admin Panel</h2>
+                <p class="text-subtle">Fitur sedang dalam pengembangan.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="initiation-view" class="app-view w-full max-w-5xl mx-auto p-8 flex-col gap-8">
+         <button id="back-to-main-btn" class="absolute top-4 left-4 p-2 rounded-full btn-secondary no-print">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+         </button>
+        <h1 class="text-4xl font-bold text-center text-main mt-12">Project Initiation & Planing</h1>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div id="new-project-card" class="card p-8 rounded-lg text-center hover:shadow-lg transition-shadow cursor-pointer">
+                <h2 class="text-2xl font-bold mb-2 text-accent">Create New Project</h2>
+                <p class="text-subtle">Mulai wizard untuk menghitung estimasi biaya proyek.</p>
+            </div>
+            <div id="saved-projects-card" class="card p-8 rounded-lg text-center hover:shadow-lg transition-shadow cursor-pointer">
+                <h2 class="text-2xl font-bold mb-2 text-accent">Proyek Tersimpan</h2>
+                <p class="text-subtle">Lihat, edit, dan kelola proyek yang sudah disimpan.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="saved-projects-view" class="app-view w-full max-w-5xl mx-auto p-8 flex-col gap-6">
+        <button id="back-to-initiation-btn" class="absolute top-4 left-4 p-2 rounded-full btn-secondary no-print">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        </button>
+        <h1 class="text-4xl font-bold text-center text-main mt-12">Proyek Tersimpan</h1>
+        <div id="saved-projects-list" class="w-full space-y-4">
+             <div class="text-center card p-6 text-subtle">Fitur ini memerlukan koneksi database untuk berfungsi.</div>
+        </div>
+    </div>
+
+
+    <div id="app-container" class="app-view min-h-screen container mx-auto p-4 md:p-8 flex-col items-center justify-center relative">
+        <button id="back-to-initiation-from-wizard-btn" class="absolute top-4 left-4 p-2 rounded-full btn-secondary no-print">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        </button>
+        
+        <div id="wizard-pages-container" class="w-full flex items-center justify-center"></div>
+    </div>
+
+    <script type="module">
+        // --- GLOBAL STATE ---
+        let projectData = {};
+        let currentPage = 1;
+        let timelineChart = null;
+        let budgetChart = null;
+        
+        // --- MASTER DATA (Business Logic) ---
+        const masterData = {
+            basePriceArsitektur: 50000,
+            basePriceInterior: 50000,
+            basePriceLanskap: 5000,
+            servicePackages: {
+                "Basic": { index: 1.0, details: "<b>Gambar Kerja (DED & MEP):</b> Prinsip & Perizinan (untuk IMB/PBG).<br><b>Still Image 3D Render:</b> Jumlah esensial (sudut pandang utama).<br><b>Video Animasi 3D:</b> Durasi < 1 menit.<br><b>RAB & RKS:</b> <span class='text-red-500 dark:text-red-400'>Tidak Termasuk</span>." },
+                "Plus": { index: 1.5, details: "<b>Gambar Kerja (DED & MEP):</b> Detail lengkap (detail fasad, pola lantai, dll).<br><b>Still Image 3D Render:</b> Jumlah komprehensif (eksplorasi desain mendalam).<br><b>Video Animasi 3D:</b> Durasi 1-2 menit (naratif).<br><b>RAB & RKS:</b> <span class='text-green-600 dark:text-green-400'>Termasuk</span>." },
+                "Premium": { index: 2.0, details: "<b>Gambar Kerja (DED & MEP):</b> Super detail & fabrikasi (untuk elemen kustom).<br><b>Still Image 3D Render:</b> Jumlah fleksibel sesuai kebutuhan.<br><b>Video Animasi 3D:</b> Durasi > 2 menit (kualitas sinematik).<br><b>RAB & RKS:</b> <span class='text-green-600 dark:text-green-400'>Termasuk</span>." }
+            },
+            serviceScopeIndex: { "Arsitektur": 1.0, "Interior": 1.0, "Arsitektur + Interior": 1.25 },
+            projectScopeIndex: { "Tingkat 1 (Lokal)": 1.0, "Tingkat 2 (Nasional)": 1.5, "Tingkat 3 (Internasional)": 2.0 },
+            complexityIndex: {
+                "A. Residensial": { Sederhana: 1.0, Menengah: 1.25, Tinggi: 1.5 },
+                "B. Komersial": { Sederhana: 1.0, Menengah: 1.5, Tinggi: 2.0 },
+                "C. Publik & Institusional": { Sederhana: 1.0, Menengah: 1.5, Tinggi: 2.0 },
+                "D. Kebudayaan & Rekreasi": { Sederhana: 1.0, Menengah: 1.40, Tinggi: 1.75 },
+                "E. Transportasi": { Sederhana: 1.0, Menengah: 1.5, Tinggi: 2.0 },
+                "F. Industri & Utilitas": { Sederhana: 1.0, Menengah: 1.25, Tinggi: 1.5 },
+                "G. Proyek Skala Kawasan": { Sederhana: 1.0, Menengah: 1.25, Tinggi: 1.5 },
+                "H. Proyek Khusus": { Sederhana: 1.0, Menengah: 1.25, Tinggi: 1.5 }
+            },
+            durations: {
+                "A. Residensial": { Sederhana: 18, Menengah: 24, Tinggi: 36 },
+                "B. Komersial": { Sederhana: 18, Menengah: 28, Tinggi: 38 },
+                "C. Publik & Institusional": { Sederhana: 18, Menengah: 32, Tinggi: 56 },
+                "D. Kebudayaan & Rekreasi": { Sederhana: 18, Menengah: 32, Tinggi: 56 },
+                "E. Transportasi": { Sederhana: 18, Menengah: 32, Tinggi: 56 },
+                "F. Industri & Utilitas": { Sederhana: 18, Menengah: 32, Tinggi: 64 },
+                "G. Proyek Skala Kawasan": { Sederhana: 24, Menengah: 42, Tinggi: 64 },
+                "H. Proyek Khusus": { Sederhana: 12, Menengah: 28, Tinggi: 42 }
+            },
+            surveyCosts: { transportPerKm: 2500, dailyPerPerson: 500000, dronePerBattery: 750000, existingBuildingIndex: 1.2 },
+            complexityQuestions: {
+                "A. Residensial": {
+                    type: 'TwoPart',
+                    param1: {
+                        label: 'Skala & Ambisi Desain',
+                        options: [
+                            { text: "Desain Efisien & Praktis (Layout Teruji)", subtext: "Fokus pada fungsi optimal dan efisiensi biaya, menggunakan denah dan material standar yang mudah ditemukan.", value: 'sederhana', examples: ["Perumahan Tipe 36/45", "Ruko Standar 2 Lantai", "Gudang Penyimpanan Logistik", "Kontrakan/Kos 10 Pintu", "Pos Jaga & Gerbang Masuk Kompleks"] },
+                            { text: "Desain Berkarakter (Konsep & Material Kustom)", subtext: "Menekankan pada gaya dan estetika personal, dengan eksplorasi denah, fasad, dan material yang lebih spesifik.", value: 'menengah', examples: ["Coffee Shop Tematik", "Rumah Tinggal Pribadi (Villa)", "Kantor Startup Modern", "Boutique Hotel atau Guesthouse", "Renovasi Fasad Toko Retail"] },
+                            { text: "Desain Ikonik & Eksperimental (Kualitas Showcase)", subtext: "Bertujuan menjadi sebuah masterpiece arsitektur, menggunakan material premium, detail fabrikasi khusus, dan teknologi terdepan.", value: 'tinggi', examples: ["Museum Seni atau Galeri", "Luxury Villa di Lokasi Premium", "Gedung Perpustakaan atau Teater Daerah", "Restoran Fine Dining Eksklusif", "Pusat Riset atau Gedung Kampus Unggulan"] },
+                        ]
+                    },
+                    param2: {
+                        label: 'Validasi Fitur Spesifik',
+                        options: [ "Struktur non-standar", "Lokasi di lahan berkontur", "Melibatkan basement atau kolam renang", "Detail interior sangat kustom", "Teknologi canggih (smart home)" ]
+                    },
+                    logic: (tempResult, featureCount) => {
+                        if (tempResult === 'sederhana' && featureCount >= 2) return 'Menengah';
+                        if (tempResult === 'sederhana') return 'Sederhana';
+                        if (tempResult === 'menengah' && featureCount >= 3) return 'Tinggi';
+                        if (tempResult === 'menengah') return 'Menengah';
+                        return 'Tinggi';
+                    }
+                },
+                "B. Komersial": {
+                    type: 'TwoPart',
+                    param1: {
+                        label: 'Skala & Tujuan Bisnis',
+                        options: [ 
+                            { text: "Fungsional & Cepat Beroperasi", subtext: "Desain yang mengutamakan efisiensi operasional dan kecepatan pembangunan untuk segera digunakan.", value: 'sederhana', examples: ["Ruko Standar", "Warung", "Kios", "Gudang Retail Kecil"] }, 
+                            { text: "Menarik Pelanggan dengan Konsep", subtext: "Desain yang memiliki tema atau konsep kuat untuk menciptakan pengalaman dan menarik target pasar spesifik.", value: 'menengah', examples: ["Kafe Tematik", "Distro", "Restoran Keluarga", "Guesthouse Unik"] }, 
+                            { text: "Skala Besar atau Destinasi", subtext: "Proyek yang menjadi tujuan utama atau memiliki skala operasional yang luas dan kompleks.", value: 'tinggi', examples: ["Supermarket", "Dealer Mobil", "Hotel Budget", "Pusat Kebugaran"] } 
+                        ]
+                    },
+                    param2: {
+                        label: 'Validasi Fitur Fungsional Khusus',
+                        options: [ "Dapur komersial", "Banyak unit sewa (>10)", "Parkir terstruktur (>10 mobil)", "Standar kebersihan/keamanan khusus", "Fasad kompleks (landmark)" ]
+                    },
+                    logic: (tempResult, featureCount) => {
+                        if (tempResult === 'sederhana' && featureCount >= 2) return 'Menengah';
+                        if (tempResult === 'sederhana') return 'Sederhana';
+                        if (tempResult === 'menengah' && featureCount >= 3) return 'Tinggi';
+                        if (tempResult === 'menengah') return 'Menengah';
+                        return 'Tinggi';
+                    }
+                },
+                "C. Publik & Institusional": { 
+                    type: 'Direct', 
+                    label: 'Lingkup & Skala Pelayanan', 
+                    options: [ 
+                        { text: 'Fasilitas Skala Lingkungan', subtext: 'Bangunan pendukung dengan fungsi tunggal untuk melayani komunitas terkecil (RT/RW).', value: 'Sederhana', examples: ["Posyandu", "Gapura", "Toilet Umum", "Halte Sederhana"] }, 
+                        { text: 'Fasilitas Skala Desa/Kelurahan', subtext: 'Bangunan dengan beberapa fungsi untuk melayani satu wilayah administratif desa atau kelurahan.', value: 'Menengah', examples: ["Kantor Desa", "Gedung TK", "Puskesmas Pembantu", "Balai Warga"] }, 
+                        { text: 'Fasilitas Skala Kecamatan/Kabupaten', subtext: 'Bangunan kompleks dengan berbagai fungsi yang melayani populasi lebih besar dan memiliki standar lebih tinggi.', value: 'Tinggi', examples: ["Kantor Kecamatan", "Pasar Tradisional", "Puskesmas Rawat Inap", "Gedung Sekolah (SD/SMP)"] }, 
+                    ] 
+                },
+                "D. Kebudayaan & Rekreasi": { 
+                    type: 'Direct', 
+                    label: 'Jenis Fasilitas & Pengalaman Pengguna', 
+                    options: [ 
+                        { text: 'Ruang Terbuka & Olahraga Dasar', subtext: 'Area rekreasi luar ruang dengan fasilitas minimal dan konstruksi sederhana.', value: 'Sederhana', examples: ["Lapangan Voli/Basket", "Taman Bermain Anak", "Jogging Track"] }, 
+                        { text: 'Gedung Komunitas dengan Fungsi Spesifik', subtext: 'Bangunan tertutup untuk kegiatan komunitas atau hobi dengan kebutuhan ruang yang spesifik.', value: 'Menengah', examples: ["GOR Bulutangkis", "Sanggar Seni", "Galeri Pameran Kecil", "Perpustakaan Komunitas"] }, 
+                        { text: 'Destinasi Publik atau Bangunan Ikonik', subtext: 'Proyek yang dirancang untuk menjadi landmark atau menampung acara berskala besar dengan standar tinggi.', value: 'Tinggi', examples: ["Museum", "Gedung Teater", "Stadion Mini", "Pusat Kebudayaan"] }, 
+                    ] 
+                },
+                "E. Transportasi": { 
+                    type: 'Direct', 
+                    label: 'Skala Operasional & Kebutuhan Sirkulasi', 
+                    options: [ 
+                        { text: 'Titik Henti & Pendukung Mikro', subtext: 'Struktur kecil yang berfungsi sebagai pendukung minor dalam sistem transportasi.', value: 'Sederhana', examples: ["Halte Bus", "Pos Jaga Gerbang Tol", "Shelter Ojek Online"] }, 
+                        { text: 'Terminal atau Fasilitas Skala Lokal', subtext: 'Fasilitas yang melayani rute transportasi dalam satu kota atau kabupaten.', value: 'Menengah', examples: ["Terminal Tipe C", "Area Parkir Terpusat", "Stasiun Kereta Lokal"] }, 
+                        { text: 'Hub Terpadu Skala Regional', subtext: 'Infrastruktur besar yang mengintegrasikan berbagai moda transportasi untuk perjalanan antar kota/provinsi.', value: 'Tinggi', examples: ["Stasiun Kereta Api Besar", "Terminal Bus Tipe A/B", "Pelabuhan Penyeberangan"] }, 
+                    ] 
+                },
+                "F. Industri & Utilitas": { 
+                    type: 'Direct', 
+                    label: 'Proses Produksi & Tingkat Risiko', 
+                    options: [ 
+                        { text: 'Penyimpanan & Kerja Manual Dasar', subtext: 'Bangunan untuk aktivitas industri ringan tanpa proses mesin yang rumit atau material berbahaya.', value: 'Sederhana', examples: ["Gudang Penyimpanan Kecil", "Bengkel Las", "Workshop Kayu Sederhana"] }, 
+                        { text: 'Produksi dengan Alur Mesin Spesifik', subtext: 'Fasilitas dengan alur kerja yang ditentukan oleh mesin produksi dan membutuhkan tata letak khusus.', value: 'Menengah', examples: ["Pabrik Roti Skala UKM", "Workshop Mebel", "Pencucian Mobil Otomatis"] }, 
+                        { text: 'Proses dengan Standar Tinggi & Teknologi Khusus', subtext: 'Pabrik atau fasilitas yang memerlukan standar kebersihan, keamanan, atau teknologi tinggi.', value: 'Tinggi', examples: ["Pabrik Farmasi", "Fasilitas Cold Storage", "Instalasi Pengolahan Air Limbah (IPAL)"] }, 
+                    ] 
+                },
+                "G. Proyek Skala Kawasan": { 
+                    type: 'Direct', 
+                    label: 'Cakupan Perancangan & Kompleksitas Elemen', 
+                    options: [ 
+                        { text: 'Penataan Elemen Lanskap & Mikro', subtext: 'Desain yang berfokus pada penataan elemen luar ruang dalam skala kecil atau terbatas.', value: 'Sederhana', examples: ["Taman Kantor", "Desain Gerbang Perumahan", "Area Plaza Kecil"] }, 
+                        { text: 'Perancangan Ruang Publik atau Kawasan Terbatas', subtext: 'Perancangan terpadu untuk sebuah area publik atau masterplan untuk kawasan yang tidak terlalu luas.', value: 'Menengah', examples: ["Revitalisasi Alun-alun Kota", "Masterplan Cluster Perumahan", "Desain Kawasan Ruko"] }, 
+                        { text: 'Perencanaan Kawasan Strategis & Terpadu', subtext: 'Pengembangan konsep makro untuk sebuah kawasan luas yang melibatkan banyak elemen dan regulasi.', value: 'Tinggi', examples: ["Masterplan Desa Wisata", "Rencana Detail Tata Ruang (RDTR) Kawasan", "Pengembangan Kawasan Industri"] }, 
+                    ] 
+                },
+                "H. Proyek Khusus": { 
+                    type: 'Direct', 
+                    label: 'Jenis Pekerjaan Utama & Tingkat Intervensi', 
+                    options: [ 
+                        { text: 'Renovasi Kosmetik & Non-Struktural', subtext: 'Pekerjaan yang berfokus pada perubahan tampilan visual tanpa mengubah struktur utama bangunan.', value: 'Sederhana', examples: ["Ganti Cat & Keramik", "Desain Furnitur Built-in", "Perbaikan Plafon"] }, 
+                        { text: 'Renovasi Fungsional & Interior Bertema', subtext: 'Perubahan yang mempengaruhi fungsi dan alur ruang, seringkali melibatkan pembongkaran dinding non-struktural.', value: 'Menengah', examples: ["Ubah Denah Ruang", "Bongkar Pasang Dinding Partisi", "Desain Interior Kafe"] }, 
+                        { text: 'Renovasi Struktural Berat & Konservasi', subtext: 'Intervensi besar pada struktur bangunan atau pekerjaan pada bangunan cagar budaya yang memerlukan perlakuan khusus.', value: 'Tinggi', examples: ["Tambah Lantai Bangunan", "Ubah Fasad Total", "Restorasi Bangunan Cagar Budaya"] }, 
+                    ] 
+                }
+            },
+        };
+
+        // --- NAVIGATION & VIEW MANAGEMENT ---
+        function navigate(pageNumber) {
+            savePageData(currentPage);
+            const wizardContainer = document.getElementById('wizard-pages-container');
+            wizardContainer.innerHTML = getPageHTML(pageNumber);
+            currentPage = pageNumber;
+            
+            setTimeout(() => {
+                if (pageNumber === 5) renderComplexityPage();
+                if (pageNumber === 6) { 
+                    savePageData(5);
+                    renderServicePackagePage(); 
+                    renderComparisonTable(); 
+                }
+                if (pageNumber === 7) renderCalculationPage();
+                if (pageNumber === 8) renderDashboard();
+                updateInputListeners();
+            }, 0);
+        }
+        function handleNext(nextPage) {
+            if (validatePage(currentPage)) { navigate(nextPage); } 
+            else { showToast("Harap lengkapi semua data yang diperlukan.", "error"); }
+        }
+        function showView(viewId) {
+            document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active-view'));
+            document.getElementById(viewId).classList.add('active-view');
+        }
+        function showDashboardView() { showView('main-dashboard'); }
+        function showInitiationView() { showView('initiation-view'); }
+        function showCalculator(isNewProject) {
+            if (isNewProject) {
+                projectData = {}; 
+            }
+            showView('app-container');
+            navigate(1);
+        }
+        function showSavedProjectsView() {
+            showView('saved-projects-view');
+        }
+
+        // --- PAGE VALIDATION & DATA HANDLING ---
+        function validatePage(pageNumber) {
+            switch(pageNumber) {
+                case 1: 
+                    return document.getElementById('clientName')?.value && 
+                           document.getElementById('projectName')?.value &&
+                           document.getElementById('projectLocation')?.value &&
+                           document.getElementById('projectBrief')?.value;
+                case 2: return !!projectData.serviceScope;
+                case 3: return !!projectData.projectScope;
+                case 4: return !!projectData.projectCategory;
+                case 5: 
+                    if (masterData.complexityQuestions[projectData.projectCategory]?.type === 'TwoPart') {
+                        return !!projectData.complexityTempResult;
+                    }
+                    return !!projectData.complexity;
+                case 6: return !!projectData.servicePackage;
+                case 7:
+                    if (projectData.mode === 'Konsultasi') {
+                        return document.getElementById('consultationDays')?.value > 0 && document.getElementById('consultants')?.value > 0;
+                    }
+                     if (projectData.mode === 'Masterplan') {
+                        return document.getElementById('landscape-site-area')?.value > 0;
+                    }
+                    return document.getElementById('buildingArea')?.value > 0;
+                default: return true;
+            }
+        }
+        
+        function savePageData(pageNumber) {
+            const pageElement = document.getElementById(`page-${pageNumber}`);
+            if (!pageElement) return;
+
+            switch(pageNumber) {
+                case 1:
+                    projectData.clientName = document.getElementById('clientName').value;
+                    projectData.projectName = document.getElementById('projectName').value;
+                    projectData.projectLocation = document.getElementById('projectLocation').value;
+                    projectData.projectBrief = document.getElementById('projectBrief').value;
+                    break;
+                case 5:
+                    if (!projectData.projectCategory || !masterData.complexityQuestions[projectData.projectCategory]) {
+                        break;
+                    }
+                    if(masterData.complexityQuestions[projectData.projectCategory].type === 'TwoPart') {
+                         if(projectData.complexityTempResult) {
+                             const complexityDef = masterData.complexityQuestions[projectData.projectCategory];
+                             const checkedCount = Array.from(document.querySelectorAll('#complexity-param2 input:checked')).length;
+                             projectData.complexity = complexityDef.logic(projectData.complexityTempResult, checkedCount);
+                             projectData.featureCount = checkedCount;
+                         }
+                    }
+                    break;
+                case 7:
+                    if (projectData.mode === 'Standar') {
+                        projectData.buildingArea = parseFloat(document.getElementById('buildingArea')?.value) || 0;
+                    } else if (projectData.mode === 'Masterplan') {
+                        updateMasterplanData();
+                    } else if (projectData.mode === 'Konsultasi') {
+                        projectData.consultationDays = parseFloat(document.getElementById('consultationDays')?.value) || 0;
+                        projectData.consultants = parseFloat(document.getElementById('consultants')?.value) || 0;
+                    }
+                    projectData.contingencyFee = parseFloat(document.getElementById('contingencyFee')?.value) || 10;
+                    projectData.startDate = document.getElementById('startDate')?.value || new Date().toISOString().split('T')[0];
+                    break;
+            }
+        }
+
+        // --- PAGE FLOW LOGIC ---
+        function handleServiceScopeNext() {
+            if (!validatePage(2)) return;
+            savePageData(2);
+            projectData.mode = (projectData.serviceScope === 'Jasa Konsultasi / Satuan') ? 'Konsultasi' : 'Standar';
+            navigate(3);
+        }
+        function handleProjectScopeNext() {
+            if (!validatePage(3)) return;
+            savePageData(3);
+            if (projectData.mode === 'Konsultasi') {
+                navigate(7);
+            } else {
+                navigate(4);
+            }
+        }
+        function handleCategoryNext() {
+            if (!validatePage(4)) return;
+            savePageData(4);
+            projectData.complexity = null;
+            projectData.complexityTempResult = null;
+
+            if (projectData.projectCategory === 'G. Proyek Skala Kawasan') {
+                projectData.mode = 'Masterplan';
+                if (!projectData.architectureItems) {
+                    projectData.architectureItems = [{ type: '', area: 0, floors: 1, total: 0 }];
+                    projectData.interiorItems = [{ type: '', area: 0 }];
+                    projectData.architectureDuplicates = [];
+                    projectData.interiorDuplicates = [];
+                    projectData.landscapeArea = 0;
+                }
+            }
+            navigate(5);
+        }
+        function handlePackageBack(){
+            navigate(5);
+        }
+        function handleCalculationBack() {
+            if (projectData.mode === 'Konsultasi') {
+                navigate(3);
+            } else {
+                navigate(6);
+            }
+        }
+        
+        // --- DYNAMIC PAGE RENDERING ---
+        function getPageHTML(pageNumber) {
+            const pages = {
+                1: `
+                    <div id="page-1" class="step-page w-full max-w-2xl flex-col gap-6 flex">
+                        <h1 class="text-3xl font-bold text-center text-main flex flex-col items-center gap-2"><span class="text-lg font-normal text-accent">Step 1</span>Data Proyek</h1>
+                        <p class="text-center text-subtle">Langkah pertama adalah mengumpulkan informasi dasar mengenai proyek Anda.</p>
+                        <div class="space-y-4">
+                            <input id="clientName" type="text" placeholder="Nama Klien" class="w-full p-3 rounded-md input-field" value="${projectData.clientName || ''}">
+                            <input id="projectName" type="text" placeholder="Nama Proyek" class="w-full p-3 rounded-md input-field" value="${projectData.projectName || ''}">
+                            <input id="projectLocation" type="text" placeholder="Lokasi Proyek" class="w-full p-3 rounded-md input-field" value="${projectData.projectLocation || ''}">
+                            <textarea id="projectBrief" placeholder="Ringkasan Brief Klien" rows="4" class="w-full p-3 rounded-md input-field">${projectData.projectBrief || ''}</textarea>
+                        </div>
+                        <div class="flex justify-end mt-4">
+                            <button id="btn-page1-next" class="btn-primary font-semibold py-2 px-6 rounded-md" disabled>Next</button>
+                        </div>
+                    </div>`,
+                2: `
+                    <div id="page-2" class="step-page w-full max-w-4xl flex-col gap-6 flex">
+                        <h1 class="text-3xl font-bold text-center text-main flex flex-col items-center gap-2"><span class="text-lg font-normal text-accent">Step 2</span>Lingkup Layanan</h1>
+                        <p class="text-center text-subtle">Pilih jenis pekerjaan utama untuk menentukan mode kalkulasi.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="serviceScopeOptions">
+                             <div class="card p-6 rounded-lg text-center cursor-pointer" data-value="Arsitektur"><h3 class="text-xl font-semibold">Arsitektur</h3><p class="text-subtle mt-2">Perancangan bangunan dari konsep hingga detail.</p></div>
+                             <div class="card p-6 rounded-lg text-center cursor-pointer" data-value="Interior"><h3 class="text-xl font-semibold">Interior</h3><p class="text-subtle mt-2">Perancangan Interior/Ruang dalam murni</p></div>
+                             <div class="card p-6 rounded-lg text-center cursor-pointer" data-value="Arsitektur + Interior"><h3 class="text-xl font-semibold">Arsitektur + Interior</h3><p class="text-subtle mt-2">Paket terintegrasi untuk desain luar dan dalam.</p></div>
+                             <div class="card p-6 rounded-lg text-center cursor-pointer" data-value="Jasa Konsultasi / Satuan"><h3 class="text-xl font-semibold">Jasa Konsultasi / Satuan</h3><p class="text-subtle mt-2">Layanan advis atau pekerjaan parsial.</p></div>
+                        </div>
+                        <div class="flex justify-between mt-4">
+                            <button id="btn-page2-back" class="btn-secondary font-semibold py-2 px-6 rounded-md">Back</button>
+                            <button id="btn-page2-next" class="btn-primary font-semibold py-2 px-6 rounded-md" disabled>Next</button>
+                        </div>
+                    </div>`,
+                3: `
+                    <div id="page-3" class="step-page w-full max-w-4xl flex-col gap-6 flex">
+                        <h1 class="text-3xl font-bold text-center text-main flex flex-col items-center gap-2"><span class="text-lg font-normal text-accent">Step 3</span>Skala Jangkauan Proyek</h1>
+                        <p class="text-center text-subtle">Tentukan jangkauan geografis proyek untuk penyesuaian indeks.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="projectScopeOptions">
+                            <div class="card p-6 rounded-lg text-center cursor-pointer" data-value="Tingkat 1 (Lokal)"><h3 class="text-xl font-semibold">Lokal</h3><p class="text-subtle mt-2">Tingkat Karisedenan Kedu</p></div>
+                            <div class="card p-6 rounded-lg text-center cursor-pointer" data-value="Tingkat 2 (Nasional)"><h3 class="text-xl font-semibold">Nasional</h3><p class="text-subtle mt-2">Proyek antar Kota/Provinsi di Indonesia.</p></div>
+                            <div class="card p-6 rounded-lg text-center cursor-pointer" data-value="Tingkat 3 (Internasional)"><h3 class="text-xl font-semibold">Internasional</h3><p class="text-subtle mt-2">Proyek di luar wilayah Indonesia.</p></div>
+                        </div>
+                        <div class="flex justify-between mt-4">
+                            <button id="btn-page3-back" class="btn-secondary font-semibold py-2 px-6 rounded-md">Back</button>
+                            <button id="btn-page3-next" class="btn-primary font-semibold py-2 px-6 rounded-md" disabled>Next</button>
+                        </div>
+                    </div>`,
+                4: `
+                    <div id="page-4" class="step-page w-full max-w-4xl flex-col gap-6 flex">
+                        <h1 class="text-3xl font-bold text-center text-main flex flex-col items-center gap-2"><span class="text-lg font-normal text-accent">Step 4</span>Kategori Utama Proyek</h1>
+                        <p class="text-center text-subtle">Pilih kategori yang paling sesuai untuk menentukan alur identifikasi kompleksitas.</p>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="projectCategoryOptions">
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="A. Residensial"><h3 class="font-semibold">Residensial</h3></div>
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="B. Komersial"><h3 class="font-semibold">Komersial</h3></div>
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="C. Publik & Institusional"><h3 class="font-semibold">Publik & Institusional</h3></div>
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="D. Kebudayaan & Rekreasi"><h3 class="font-semibold">Kebudayaan & Rekreasi</h3></div>
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="E. Transportasi"><h3 class="font-semibold">Transportasi</h3></div>
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="F. Industri & Utilitas"><h3 class="font-semibold">Industri & Utilitas</h3></div>
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="G. Proyek Skala Kawasan"><h3 class="font-semibold">Proyek Skala Kawasan</h3></div>
+                            <div class="card p-4 rounded-lg text-center cursor-pointer" data-value="H. Proyek Khusus"><h3 class="font-semibold">Proyek Khusus</h3></div>
+                        </div>
+                        <div class="flex justify-between mt-4">
+                            <button id="btn-page4-back" class="btn-secondary font-semibold py-2 px-6 rounded-md">Back</button>
+                            <button id="btn-page4-next" class="btn-primary font-semibold py-2 px-6 rounded-md" disabled>Next</button>
+                        </div>
+                    </div>`,
+                5: `
+                    <div id="page-5" class="step-page w-full max-w-4xl flex-col gap-6 flex">
+                        <h1 class="text-3xl font-bold text-center text-main flex flex-col items-center gap-2"><span class="text-lg font-normal text-accent">Step 5</span>Identifikasi Kompleksitas</h1>
+                        <p class="text-center text-subtle">Bantu kami memahami tingkat kesulitan proyek Anda untuk estimasi yang lebih akurat.</p>
+                        <div id="complexity-content" class="w-full"></div>
+                        <div class="flex justify-between mt-4">
+                            <button id="btn-page5-back" class="btn-secondary font-semibold py-2 px-6 rounded-md">Back</button>
+                            <button id="btn-page5-next" class="btn-primary font-semibold py-2 px-6 rounded-md" disabled>Next</button>
+                        </div>
+                    </div>`,
+                6: `
+                    <div id="page-6" class="step-page w-full max-w-5xl flex-col gap-6 flex">
+                        <h1 class="text-3xl font-bold text-center text-main flex flex-col items-center gap-2"><span class="text-lg font-normal text-accent">Step 6</span>Pemilihan Paket Layanan</h1>
+                        <p class="text-center text-subtle">Pilih tingkat layanan yang sesuai dengan kebutuhan dan kualitas output yang Anda harapkan.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="servicePackageOptions"></div>
+                        <div class="mt-8">
+                            <button id="toggle-comparison-btn" class="w-full btn-secondary font-semibold py-3 px-6 rounded-md">Lihat Perbandingan Detail Paket ▼</button>
+                            <div id="comparison-table-container" class="mt-4" style="display:none;"></div>
+                        </div>
+                        <div class="flex justify-between mt-4">
+                            <button id="btn-page6-back" class="btn-secondary font-semibold py-2 px-6 rounded-md">Back</button>
+                            <button id="btn-page6-next" class="btn-primary font-semibold py-2 px-6 rounded-md" disabled>Next</button>
+                        </div>
+                    </div>`,
+                7: `
+                    <div id="page-7" class="step-page w-full max-w-4xl flex-col gap-6 flex">
+                        <h1 class="text-3xl font-bold text-center text-main flex flex-col items-center gap-2"><span class="text-lg font-normal text-accent">Step 7</span>Estimasi & Perhitungan</h1>
+                        <p class="text-center text-subtle">Lengkapi data akhir untuk proses kalkulasi. Semua input di sini akan mempengaruhi hasil simulasi.</p>
+                        <div id="calculation-content" class="w-full"></div>
+                        <div class="w-full flex justify-between mt-6">
+                            <button id="btn-page7-back" class="btn-secondary font-semibold py-2 px-6 rounded-md">Back</button>
+                            <button id="btn-page7-action" class="btn-primary font-semibold py-2 px-6 rounded-md" disabled>Kalkulasi Estimasi</button>
+                        </div>
+                    </div>`,
+                8: `
+                    <div id="page-8" class="step-page w-full max-w-7xl flex-col gap-6 flex p-4 md:p-8">
+                         <h1 class="text-3xl md:text-4xl font-bold text-center text-main no-print">Simulasi Proyeksi Interaktif</h1>
+                         
+                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                            <div class="card p-4 rounded-lg">
+                                <h3 class="text-lg font-bold mb-2 text-accent">Data Proyek</h3>
+                                <ul class="space-y-1 text-sm">
+                                    <li><strong>Klien:</strong> <span id="sim-clientName"></span></li>
+                                    <li><strong>Proyek:</strong> <span id="sim-projectName"></span></li>
+                                    <li><strong>Lokasi:</strong> <span id="sim-projectLocation"></span></li>
+                                    <li><strong>Ringkasan:</strong> <p id="sim-projectBrief" class="text-xs text-subtle mt-1"></p></li>
+                                </ul>
+                            </div>
+                            <div class="card p-4 rounded-lg">
+                                <h3 class="text-lg font-bold mb-2 text-accent">Parameter Proyek</h3>
+                                <ul class="space-y-1 text-sm">
+                                    <li><strong>Lingkup:</strong> <span id="sim-service-scope"></span></li>
+                                    <li><strong>Skala:</strong> <span id="sim-project-scope"></span></li>
+                                    <li><strong>Kategori:</strong> <span id="sim-project-category"></span></li>
+                                    <li><strong>Kompleksitas:</strong> <span id="sim-complexity"></span></li>
+                                    <li><strong>Paket:</strong> <span id="sim-package" class="font-bold"></span></li>
+                                </ul>
+                            </div>
+                         </div>
+
+                         <div class="card p-6 rounded-lg flex-grow w-full">
+                            <h3 class="text-xl font-bold mb-4 text-center text-main">Tahap Pengerjaan Proyek</h3>
+                            <div class="chart-container" style="min-height: 450px;">
+                                <canvas id="ganttChart"></canvas>
+                            </div>
+                         </div>
+                         
+                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+                            <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                <div class="card p-4 rounded-lg">
+                                    <h3 class="text-lg font-bold mb-2 text-accent">Rincian Biaya Desain</h3>
+                                    <ul id="sim-cost-breakdown" class="space-y-1 text-sm"></ul>
+                                </div>
+                                <div class="card p-4 rounded-lg">
+                                    <h3 class="text-lg font-bold mb-2 text-accent">Jadwal Pembayaran</h3>
+                                    <ul id="sim-payment-terms" class="space-y-1 text-sm"></ul>
+                                </div>
+                            </div>
+                            <div class="card p-6 rounded-lg">
+                                <h3 class="text-xl font-bold mb-2">Total & Alokasi</h3>
+                                <div class="text-center mb-4">
+                                    <p class="text-lg font-semibold text-subtle">Total Biaya (IDR)</p>
+                                    <p id="sim-totalCost" class="text-3xl font-bold text-accent"></p>
+                                    <p class="text-sm font-semibold text-subtle mt-4">Estimasi Selesai: <span id="sim-endDate" class="font-bold"></span></p>
+                                    <p class="text-sm font-semibold text-subtle">Total Durasi: <span id="sim-totalDuration" class="font-bold"></span> Hari</p>
+                                </div>
+                                <div class="chart-container" style="height: 200px;"><canvas id="donutChart"></canvas></div>
+                            </div>
+                         </div>
+
+                         <div class="w-full flex justify-center gap-4 mt-6 no-print">
+                             <button id="edit-params-btn" class="btn-secondary font-semibold py-3 px-8 rounded-md">Ubah Parameter</button>
+                             <button id="export-pdf-btn" class="btn-secondary font-semibold py-3 px-8 rounded-md">Cetak Proposal (PDF)</button>
+                             <button id="save-project-btn" class="btn-primary font-semibold py-3 px-8 rounded-md">Simpan Proyek</button>
+                         </div>
+                     </div>`
+            };
+            return pages[pageNumber] || `<div>Page ${pageNumber} not found.</div>`;
+        }
+        
+        function renderComplexityPage() {
+            const container = document.getElementById('complexity-content');
+            const category = projectData.projectCategory;
+            if (!category || !masterData.complexityQuestions[category]) {
+                container.innerHTML = `<p class="text-center text-subtle">Pilih kategori proyek terlebih dahulu.</p>`;
+                return;
+            }
+            const definition = masterData.complexityQuestions[category];
+            container.innerHTML = '';
+            
+            if (definition.type === 'TwoPart') {
+                let html = `<h3 class="text-lg font-semibold mb-2">${definition.param1.label}</h3><div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="complexity-param1Options">`;
+                definition.param1.options.forEach((opt, i) => {
+                    let examplesHTML = '';
+                    if(opt.examples) {
+                        examplesHTML = `<div id="examples-${i}" class="examples-dropdown text-sm text-subtle space-y-1 pl-4 mt-2" style="display:none;"><ul>`;
+                        opt.examples.forEach(ex => {
+                            examplesHTML += `<li class="list-disc">${ex}</li>`;
+                        });
+                        examplesHTML += `</ul></div>`;
+                    }
+
+                    html += `<div class="card p-4 rounded-lg flex flex-col cursor-pointer" data-value="${opt.value}">
+                                 <div>
+                                     <h4 class="font-semibold">${opt.text}</h4>
+                                     <p class="text-sm text-subtle mt-1">${opt.subtext}</p>
+                                 </div>
+                                 ${opt.examples ? `<button class="toggle-examples-btn text-accent hover:text-blue-500 text-sm w-full text-left mt-4" data-target="examples-${i}">Lihat Contoh Proyek ▼</button>` : ''}
+                                 ${examplesHTML}
+                               </div>`;
+                });
+                html += `</div><h3 class="text-lg font-semibold mt-6 mb-2">${definition.param2.label}</h3><div class="space-y-2" id="complexity-param2">`;
+                definition.param2.options.forEach((opt, index) => {
+                    html += `<label class="flex items-center gap-3 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"><input type="checkbox" id="feature-${index}" value="${opt}" class="form-checkbox h-5 w-5 bg-gray-200 border-gray-300 text-blue-600 focus:ring-blue-500"><span>${opt}</span></label>`;
+                });
+                html += `</div>`;
+                container.innerHTML = html;
+            } else if (definition.type === 'Direct') {
+                let html = `<h3 class="text-lg font-semibold mb-2">${definition.label}</h3><div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="complexity-directOptions">`;
+                definition.options.forEach((opt, i) => {
+                    let examplesHTML = '';
+                    if(opt.examples) {
+                        examplesHTML = `<div id="examples-${i}" class="examples-dropdown text-sm text-subtle space-y-1 pl-4 mt-2" style="display:none;"><ul>`;
+                        opt.examples.forEach(ex => {
+                            examplesHTML += `<li class="list-disc">${ex}</li>`;
+                        });
+                        examplesHTML += `</ul></div>`;
+                    }
+                     html += `<div class="card p-4 rounded-lg flex flex-col cursor-pointer" data-value="${opt.value}">
+                                 <div>
+                                     <h4 class="font-semibold">${opt.text}</h4>
+                                     <p class="text-sm text-subtle mt-1">${opt.subtext}</p>
+                                 </div>
+                                 ${opt.examples ? `<button class="toggle-examples-btn text-accent hover:text-blue-500 text-sm w-full text-left mt-4" data-target="examples-${i}">Lihat Contoh Proyek ▼</button>` : ''}
+                                 ${examplesHTML}
+                               </div>`;
+                });
+                html += `</div>`;
+                container.innerHTML = html;
+            }
+        }
+        
+        function renderServicePackagePage() {
+            const container = document.getElementById('servicePackageOptions');
+            container.innerHTML = '';
+            const rangeIndex = projectData.projectScope ? masterData.projectScopeIndex[projectData.projectScope] : 1.0;
+            const complexityIdx = (projectData.projectCategory && projectData.complexity && masterData.complexityIndex[projectData.projectCategory]) 
+                                  ? (masterData.complexityIndex[projectData.projectCategory][projectData.complexity] || 1.0) 
+                                  : 1.0;
+
+            ['Basic', 'Plus', 'Premium'].forEach(pkg => {
+                let priceDisplayHTML;
+                if (projectData.mode === 'Masterplan') {
+                    const packageIndex = masterData.servicePackages[pkg].index;
+                    let arsitekturPrice = masterData.basePriceArsitektur * packageIndex * rangeIndex * complexityIdx;
+                    let interiorPrice = masterData.basePriceInterior * packageIndex * rangeIndex * complexityIdx;
+                    let lanskapPrice = masterData.basePriceLanskap * packageIndex * rangeIndex * complexityIdx;
+                    
+                    priceDisplayHTML = `
+                        <div class="text-left text-base space-y-2 my-4 px-2">
+                            <div class="flex justify-between"><span>Arsitektur:</span> <span class="font-semibold text-accent">${new Intl.NumberFormat('id-ID').format(roundToNearestThousand(arsitekturPrice))} / m²</span></div>
+                            <div class="flex justify-between"><span>Interior:</span> <span class="font-semibold text-accent">${new Intl.NumberFormat('id-ID').format(roundToNearestThousand(interiorPrice))} / m²</span></div>
+                            <div class="flex justify-between border-b border-gray-200 dark:border-gray-600 pb-2"><span>Lanskap:</span> <span class="font-semibold text-accent">${new Intl.NumberFormat('id-ID').format(roundToNearestThousand(lanskapPrice))} / m²</span></div>
+                        </div>
+                    `;
+                } else {
+                    const scopeIndex = projectData.serviceScope ? (masterData.serviceScopeIndex[projectData.serviceScope] || 1.0) : 1.0;
+                    let displayPrice = masterData.basePriceArsitektur * masterData.servicePackages[pkg].index * scopeIndex * rangeIndex * complexityIdx;
+                    displayPrice = roundToNearestThousand(displayPrice);
+                    const priceUnit = '/ m² Bangunan';
+                    priceDisplayHTML = `<p class="text-4xl font-bold text-center my-4 text-accent">${new Intl.NumberFormat('id-ID').format(displayPrice)}<span class="text-lg font-normal text-subtle">${priceUnit}</span></p>`;
+                }
+                
+                let html = `
+                    <div class="card p-6 rounded-lg flex flex-col cursor-pointer" data-value="${pkg}">
+                        <div class="flex-grow">
+                            <h3 class="text-2xl font-bold text-center">${pkg}</h3>
+                            ${priceDisplayHTML}
+                        </div>
+                    </div>`;
+                container.innerHTML += html;
+            });
+        }
+        
+        function renderCalculationPage() {
+            const container = document.getElementById('calculation-content');
+            const today = new Date().toISOString().split('T')[0];
+            let commonFields = `
+                <div class="card p-6 rounded-lg bg-subtle">
+                    <h3 class="text-xl font-bold mb-4 text-main">Parameter Tambahan</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="startDate" class="block text-sm font-medium text-subtle">Tanggal Mulai Proyek</label>
+                            <input type="date" id="startDate" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.startDate || today}">
+                        </div>
+                        <div>
+                            <label for="contingencyFee" class="block text-sm font-medium text-subtle">Biaya Tak Terduga (%)</label>
+                            <input type="number" id="contingencyFee" placeholder="Contoh: 10" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.contingencyFee || 10}">
+                        </div>
+                    </div>
+                </div>`;
+            
+            let modeSpecificFields = '';
+            if (projectData.mode === 'Masterplan') {
+                modeSpecificFields = getMasterplanFormHTML();
+            } else if (projectData.mode === 'Standar') {
+                modeSpecificFields = `
+                <div class="card p-6 rounded-lg bg-subtle">
+                    <h3 class="text-xl font-bold mb-4 text-main">Data Luasan & Lahan</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div>
+                            <label for="buildingArea" class="block text-sm font-medium text-subtle">Total Luas Bangunan (m²)</label>
+                            <input type="number" id="buildingArea" placeholder="Contoh: 150" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.buildingArea || ''}" required>
+                        </div>
+                         <div>
+                            <label for="siteArea" class="block text-sm font-medium text-subtle">Total Luas Lahan/Kawasan (m²)</label>
+                            <input type="number" id="siteArea" placeholder="Contoh: 300" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.siteArea || ''}" required>
+                        </div>
+                        <div class="md:col-span-2 mt-2">
+                            <label class="flex items-center gap-3">
+                                <input type="checkbox" id="isExistingBuilding" class="form-checkbox h-5 w-5" ${projectData.isExistingBuilding ? 'checked' : ''}>
+                                <span>Termasuk biaya survei & pengukuran bangunan eksisting? (Indeks biaya +20%)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="card p-6 rounded-lg bg-subtle">
+                    <h3 class="text-xl font-bold mb-4 text-main">Estimasi Biaya Survei</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <label for="surveyDistance" class="block text-sm font-medium text-subtle">Jarak (km)</label>
+                            <input type="number" id="surveyDistance" placeholder="0" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.surveyDistance || 0}">
+                        </div>
+                        <div>
+                            <label for="surveyDays" class="block text-sm font-medium text-subtle">Hari</label>
+                            <input type="number" id="surveyDays" placeholder="0" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.surveyDays || 0}">
+                        </div>
+                        <div>
+                            <label for="surveyTeamSize" class="block text-sm font-medium text-subtle">Personil</label>
+                            <input type="number" id="surveyTeamSize" placeholder="0" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.surveyTeamSize || 0}">
+                        </div>
+                        <div>
+                            <label for="droneBatteries" class="block text-sm font-medium text-subtle">Baterai Drone</label>
+                            <input type="number" id="droneBatteries" placeholder="0" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.droneBatteries || 0}">
+                        </div>
+                    </div>
+                </div>`;
+            } else if (projectData.mode === 'Konsultasi') {
+                modeSpecificFields = `
+                <div class="card p-6 rounded-lg bg-subtle">
+                    <h3 class="text-xl font-bold mb-4 text-main">Parameter Konsultasi</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         <div>
+                            <label for="consultationDays" class="block text-sm font-medium text-subtle">Durasi Konsultasi (Hari)</label>
+                            <input type="number" id="consultationDays" placeholder="Contoh: 3" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.consultationDays || ''}" required>
+                        </div>
+                         <div>
+                            <label for="consultants" class="block text-sm font-medium text-subtle">Jumlah Konsultan</label>
+                            <input type="number" id="consultants" placeholder="Contoh: 1" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.consultants || ''}" required>
+                        </div>
+                    </div>
+                </div>`;
+            }
+            
+            container.innerHTML = `<div class="w-full space-y-6">${modeSpecificFields}${commonFields}</div>`;
+            if (projectData.mode === 'Masterplan') {
+                updateMasterplanTotals();
+            }
+        }
+
+        function getMasterplanFormHTML() {
+            const createRow = (item, index, type) => {
+                if (type === 'architectureItems') {
+                    return `
+                        <div class="grid grid-cols-5 gap-2 items-center masterplan-row" data-type="architectureItems" data-index="${index}">
+                            <input type="text" data-field="type" placeholder="Jenis Bangunan" class="col-span-2 p-2 input-field masterplan-input" value="${item.type || ''}">
+                            <input type="number" data-field="area" placeholder="Luas Lantai" class="p-2 input-field masterplan-input" value="${item.area || ''}">
+                            <input type="number" data-field="floors" placeholder="Jml Lantai" class="p-2 input-field masterplan-input" value="${item.floors || 1}">
+                            <button class="remove-row bg-red-500 text-white p-2 rounded-md hover:bg-red-600">-</button>
+                        </div>`;
+                }
+                if (type === 'interiorItems') {
+                    return `
+                        <div class="grid grid-cols-4 gap-2 items-center masterplan-row" data-type="interiorItems" data-index="${index}">
+                            <input type="text" data-field="type" placeholder="Jenis Ruang" class="col-span-2 p-2 input-field masterplan-input" value="${item.type || ''}">
+                            <input type="number" data-field="area" placeholder="Luas Ruang" class="p-2 input-field masterplan-input" value="${item.area || ''}">
+                            <button class="remove-row bg-red-500 text-white p-2 rounded-md hover:bg-red-600">-</button>
+                        </div>`;
+                }
+                if (type === 'architectureDuplicates') {
+                     return `
+                        <div class="grid grid-cols-5 gap-2 items-center masterplan-row" data-type="architectureDuplicates" data-index="${index}">
+                            <input type="text" data-field="type" placeholder="Jenis Bangunan" class="col-span-2 p-2 input-field masterplan-input" value="${item.type || ''}">
+                            <input type="number" data-field="area" placeholder="Luas per Unit" class="p-2 input-field masterplan-input" value="${item.area || ''}">
+                            <input type="number" data-field="count" placeholder="Jml Duplikasi" class="p-2 input-field masterplan-input" value="${item.count || 1}">
+                            <button class="remove-row bg-red-500 text-white p-2 rounded-md hover:bg-red-600">-</button>
+                        </div>`;
+                }
+                if (type === 'interiorDuplicates') {
+                     return `
+                        <div class="grid grid-cols-4 gap-2 items-center masterplan-row" data-type="interiorDuplicates" data-index="${index}">
+                            <input type="text" data-field="type" placeholder="Jenis Ruang" class="col-span-2 p-2 input-field masterplan-input" value="${item.type || ''}">
+                            <input type="number" data-field="area" placeholder="Luas per Unit" class="p-2 input-field masterplan-input" value="${item.area || ''}">
+                             <input type="number" data-field="count" placeholder="Jml Duplikasi" class="p-2 input-field masterplan-input" value="${item.count || 1}">
+                            <button class="remove-row bg-red-500 text-white p-2 rounded-md hover:bg-red-600">-</button>
+                        </div>`;
+                }
+            };
+
+            return `
+                <div class="card p-6 rounded-lg bg-subtle space-y-4">
+                    <h3 class="text-xl font-bold text-main">Komponen Arsitektur</h3>
+                    <div id="architecture-rows">${(projectData.architectureItems || []).map((item, index) => createRow(item, index, 'architectureItems')).join('')}</div>
+                    <button id="add-architecture-row" class="btn-secondary py-1 px-3 text-sm">Tambah Bangunan</button>
+                    <p class="text-right font-semibold">Subtotal Luas Arsitektur: <span id="arch-subtotal" class="text-accent">0</span> m²</p>
+                </div>
+                 <div class="card p-6 rounded-lg bg-subtle space-y-4">
+                    <h3 class="text-xl font-bold text-main">Komponen Interior</h3>
+                    <div id="interior-rows">${(projectData.interiorItems || []).map((item, index) => createRow(item, index, 'interiorItems')).join('')}</div>
+                    <button id="add-interior-row" class="btn-secondary py-1 px-3 text-sm">Tambah Ruang</button>
+                    <p class="text-right font-semibold">Subtotal Luas Interior: <span id="int-subtotal" class="text-accent">0</span> m²</p>
+                </div>
+                 <div class="card p-6 rounded-lg bg-subtle space-y-4">
+                    <h3 class="text-xl font-bold text-main">Komponen Arsitektur (Duplikasi)</h3>
+                    <div id="architectureDuplicates-rows">${(projectData.architectureDuplicates || []).map((item, index) => createRow(item, index, 'architectureDuplicates')).join('')}</div>
+                    <button id="add-architectureDuplicates-row" class="btn-secondary py-1 px-3 text-sm">Tambah Duplikasi</button>
+                    <p class="text-right font-semibold">Subtotal Luas Duplikasi Arsitektur: <span id="arch-dup-subtotal" class="text-accent">0</span> m²</p>
+                </div>
+                 <div class="card p-6 rounded-lg bg-subtle space-y-4">
+                    <h3 class="text-xl font-bold text-main">Komponen Interior (Duplikasi)</h3>
+                    <div id="interiorDuplicates-rows">${(projectData.interiorDuplicates || []).map((item, index) => createRow(item, index, 'interiorDuplicates')).join('')}</div>
+                    <button id="add-interiorDuplicates-row" class="btn-secondary py-1 px-3 text-sm">Tambah Duplikasi</button>
+                    <p class="text-right font-semibold">Subtotal Luas Duplikasi Interior: <span id="int-dup-subtotal" class="text-accent">0</span> m²</p>
+                </div>
+                <div class="card p-6 rounded-lg bg-subtle">
+                    <h3 class="text-xl font-bold text-main">Komponen Lanskap</h3>
+                    <label for="landscape-site-area" class="block text-sm font-medium text-subtle">Total Luas Site (m²)</label>
+                    <input type="number" id="landscape-site-area" placeholder="Contoh: 5000" class="mt-1 w-full p-2 rounded-md input-field masterplan-input" value="${projectData.landscapeArea || ''}" required>
+                    <p class="text-right font-semibold mt-2">Subtotal Luas Lanskap (Area Hijau): <span id="landscape-subtotal" class="text-accent">0</span> m²</p>
+                </div>
+            `;
+        }
+        
+        function renderComparisonTable() {
+            const container = document.getElementById('comparison-table-container');
+            if (!container) return;
+            const featuresData = [
+                {
+                    category: "Output Dokumen Desain",
+                    items: [
+                        { name: 'Gambar Arsitektural', basic: 'Denah, Tampak, Potongan, Rencana Atap', plus: 'Lengkap + Detail Fasad & Pola', premium: 'Super Detail + Detail Fabrikasi' },
+                        { name: 'Gambar Struktur', basic: 'Denah Pondasi, Kolom, Sloof, Balok, Plat', plus: 'Lengkap', premium: 'Lengkap + Detail Penulangan' },
+                        { name: 'Gambar MEP', basic: 'Titik Lampu & Sakelar', plus: 'Lengkap + Stop Kontak & Air Bersih/Kotor', premium: 'Super Lengkap + Air Hujan, AC, Pemanas Air' },
+                        { name: 'RAB & RKS', basic: '❌', plus: 'Estimasi Material Utama', premium: 'RAB Detail (Material & Upah)' },
+                    ]
+                },
+                {
+                    category: "Visualisasi & Presentasi",
+                    items: [
+                        { name: 'Visualisasi 3D (Render) Exterior', basic: '2 View', plus: '4 View', premium: 'Max View' },
+                        { name: 'Visualisasi 3D (Render) Interior', basic: '❌', plus: '4 View', premium: 'Max View' },
+                        { name: 'Video Animasi/Walkthrough', basic: '❌', plus: '✅ (1-2 menit)', premium: '✅ (>2 menit)' },
+                    ]
+                },
+                {
+                    category: "Proses & Dukungan",
+                    items: [
+                        { name: 'Konsultasi Awal', basic: '1x Sesi', plus: 'Fleksibel', premium: 'Fleksibel & Intensif' },
+                        { name: 'Revisi Desain Skematik (Denah)', basic: 'Unlimited', plus: 'Unlimited', premium: 'Unlimited' },
+                        { name: 'Revisi Desain Development (3D)', basic: '2x', plus: '5x', premium: '10x' },
+                        { name: 'Jaminan Desain Bisa Dibangun', basic: '✅', plus: '✅', premium: '✅' },
+                    ]
+                }
+            ];
+
+            let tableHTML = `
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse card">
+                        <thead>
+                            <tr class="bg-subtle">
+                                <th class="p-3 font-semibold border-b dark:border-gray-600 text-main">Fitur/Layanan</th>
+                                <th class="p-3 font-semibold border-b dark:border-gray-600 text-center text-main">Basic</th>
+                                <th class="p-3 font-semibold border-b dark:border-gray-600 text-center text-main">Plus</th>
+                                <th class="p-3 font-semibold border-b dark:border-gray-600 text-center text-main">Premium</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            featuresData.forEach(category => {
+                tableHTML += `
+                    <tr>
+                        <th colspan="4" class="p-2 bg-gray-100 dark:bg-gray-800 text-main font-semibold text-left">${category.category}</th>
+                    </tr>
+                `;
+                category.items.forEach(item => {
+                    tableHTML += `
+                        <tr>
+                            <td class="p-3 border-b dark:border-gray-700 text-subtle">${item.name}</td>
+                            <td class="p-3 border-b dark:border-gray-700 text-center text-subtle">${item.basic}</td>
+                            <td class="p-3 border-b dark:border-gray-700 text-center text-subtle">${item.plus}</td>
+                            <td class="p-3 border-b dark:border-gray-700 text-center text-subtle">${item.premium}</td>
+                        </tr>
+                    `;
+                });
+            });
+
+            tableHTML += `</tbody></table></div>`;
+            container.innerHTML = tableHTML;
+        }
+
+        // --- SIMULATION & DASHBOARD ---
+        function calculateProjectCosts() {
+            const {
+                mode, serviceScope, projectScope, projectCategory, complexity, servicePackage,
+                buildingArea, siteArea, isExistingBuilding,
+                surveyDistance, surveyDays, surveyTeamSize, droneBatteries,
+                consultationDays, consultants, contingencyFee, startDate
+            } = projectData;
+
+            let designFee = 0;
+            let surveyCost = 0;
+            let baseDuration = 0;
+            let totalBuildingArea = 0;
+
+            const packageIndex = masterData.servicePackages[servicePackage]?.index || 1.0;
+            const rangeIndex = masterData.projectScopeIndex[projectScope] || 1.0;
+            const complexityIdx = (projectCategory && complexity) ? (masterData.complexityIndex[projectCategory]?.[complexity] || 1.0) : 1.0;
+
+            if (projectData.mode === 'Masterplan') {
+                let totalArchCost = 0;
+                let totalInteriorCost = 0;
+                let totalArchArea = 0;
+                let totalInteriorArea = 0;
+
+                projectData.architectureItems.forEach(item => {
+                    const itemArea = item.area * item.floors;
+                    totalArchArea += itemArea;
+                    totalArchCost += itemArea * masterData.basePriceArsitektur * packageIndex * rangeIndex * complexityIdx;
+                });
+                projectData.interiorItems.forEach(item => {
+                    totalInteriorArea += item.area;
+                    totalInteriorCost += item.area * masterData.basePriceInterior * packageIndex * rangeIndex * complexityIdx;
+                });
+                projectData.architectureDuplicates.forEach(item => {
+                    const physicalArea = item.area * item.count;
+                    const billableArea = physicalArea * 0.5;
+                    totalArchArea += physicalArea;
+                    totalArchCost += billableArea * masterData.basePriceArsitektur * packageIndex * rangeIndex * complexityIdx;
+                });
+                projectData.interiorDuplicates.forEach(item => {
+                    const physicalArea = item.area * item.count;
+                    const billableArea = physicalArea * 0.5;
+                    totalInteriorArea += physicalArea;
+                    totalInteriorCost += billableArea * masterData.basePriceInterior * packageIndex * rangeIndex * complexityIdx;
+                });
+                
+                const landscapeArea = Math.max(0, projectData.landscapeArea - totalArchArea);
+                const landscapeCost = landscapeArea * masterData.basePriceLanskap * packageIndex * rangeIndex * complexityIdx;
+
+                designFee = totalArchCost + totalInteriorCost + landscapeCost;
+                baseDuration = masterData.durations['G. Proyek Skala Kawasan']?.[complexity] || 60;
+                totalBuildingArea = totalArchArea + totalInteriorArea;
+
+                projectData.costBreakdown = { totalArchCost, totalInteriorCost, landscapeCost };
+
+            } else if (mode === 'Standar') {
+                const scopeIndex = masterData.serviceScopeIndex[serviceScope] || 1.0;
+                designFee = masterData.basePriceArsitektur * buildingArea * packageIndex * scopeIndex * rangeIndex * complexityIdx;
+                baseDuration = masterData.durations[projectCategory]?.[complexity] || 30;
+                totalBuildingArea = buildingArea;
+            } else if (mode === 'Konsultasi') {
+                designFee = consultationDays * consultants * masterData.surveyCosts.dailyPerPerson * rangeIndex;
+                baseDuration = consultationDays;
+            }
+            
+            if (mode !== 'Konsultasi' && surveyDays > 0 && surveyTeamSize > 0) {
+                const transport = surveyDistance * 2 * masterData.surveyCosts.transportPerKm;
+                const accommodation = surveyDays * surveyTeamSize * masterData.surveyCosts.dailyPerPerson;
+                const droneCost = droneBatteries * masterData.surveyCosts.dronePerBattery;
+                surveyCost = transport + accommodation + droneCost;
+            }
+            
+            if (isExistingBuilding) {
+                surveyCost *= masterData.surveyCosts.existingBuildingIndex;
+            }
+
+            const subTotal = designFee + surveyCost;
+            const contingencyAmount = subTotal * (contingencyFee / 100);
+            const finalTotalCost = subTotal + contingencyAmount;
+            
+            const finalDuration = Math.ceil(baseDuration * packageIndex * (1 + (totalBuildingArea / 1000)));
+
+            const startDateObj = new Date(startDate);
+            const endDateObj = new Date(startDate);
+            endDateObj.setDate(endDateObj.getDate() + finalDuration);
+            
+            const termin2Date = new Date(startDate);
+            termin2Date.setDate(termin2Date.getDate() + Math.round(finalDuration * 0.5));
+            projectData.paymentTerms = {
+                termin1: { date: formatDate(startDateObj), amount: finalTotalCost * 0.5 },
+                termin2: { date: formatDate(termin2Date), amount: finalTotalCost * 0.3 },
+                termin3: { date: formatDate(endDateObj), amount: finalTotalCost * 0.2 },
+            };
+
+            projectData.costs = { designFee, surveyCost, contingencyAmount, subTotal };
+            projectData.finalTotalCost = roundToNearestThousand(finalTotalCost);
+            projectData.totalDuration = finalDuration;
+            projectData.endDate = endDateObj.toISOString().split('T')[0];
+            projectData.timelineData = generateTimelineData(startDateObj, finalDuration);
+        }
+        
+        function generateTimelineData(startDate, totalDuration) {
+            const phases = [
+                { name: 'Desain Skematik', ratio: 0.20, fixed: 0 },
+                { name: 'Asistensi Klien 1', ratio: 0, fixed: 4 },
+                { name: 'Desain Development (3D)', ratio: 0.20, fixed: 0 },
+                { name: 'Asistensi Klien 2', ratio: 0, fixed: 4 },
+                { name: 'Dokumentasi Teknis (DED+MEP)', ratio: 0.25, fixed: 0, depends: null },
+                { name: 'RAB', ratio: 0.10, fixed: 0, depends: 'Dokumentasi Teknis (DED+MEP)', offset: 1 },
+                { name: 'Rendering Final', ratio: 0.15, fixed: 0, depends: 'Dokumentasi Teknis (DED+MEP)', offset: 0 },
+            ];
+
+            const fixedDuration = phases.reduce((sum, p) => sum + p.fixed, 0);
+            const remainingDuration = totalDuration - fixedDuration;
+            const remainingRatioSum = phases.reduce((sum, p) => sum + p.ratio, 0);
+            
+            let cumulativeDuration = 0;
+            const results = {};
+
+            phases.forEach(phase => {
+                if (phase.depends === null || !results[phase.depends]) {
+                    const duration = phase.fixed > 0 ? phase.fixed : Math.round(remainingDuration * (phase.ratio / remainingRatioSum));
+                    const start = cumulativeDuration;
+                    const end = start + duration;
+                    
+                    const phaseStartDate = new Date(startDate);
+                    phaseStartDate.setDate(phaseStartDate.getDate() + start);
+                    const phaseEndDate = new Date(startDate);
+                    phaseEndDate.setDate(phaseEndDate.getDate() + end);
+
+                    results[phase.name] = {
+                        label: [phase.name, `(${formatDate(phaseStartDate)} - ${formatDate(phaseEndDate)} | ${duration} hari)`],
+                        start,
+                        end,
+                        duration
+                    };
+                    cumulativeDuration = end;
+                }
+            });
+
+            phases.forEach(phase => {
+                 if (phase.depends && results[phase.depends]) {
+                    const duration = phase.fixed > 0 ? phase.fixed : Math.round(remainingDuration * (phase.ratio / remainingRatioSum));
+                    const start = results[phase.depends].start + (phase.offset || 0);
+                    const end = start + duration;
+
+                    const phaseStartDate = new Date(startDate);
+                    phaseStartDate.setDate(phaseStartDate.getDate() + start);
+                    const phaseEndDate = new Date(startDate);
+                    phaseEndDate.setDate(phaseEndDate.getDate() + end);
+
+                    results[phase.name] = {
+                        label: [phase.name, `(${formatDate(phaseStartDate)} - ${formatDate(phaseEndDate)} | ${duration} hari)`],
+                        start,
+                        end,
+                        duration
+                    };
+                 }
+            });
+
+            return Object.values(results);
+        }
+
+        function startSimulation(){
+            const loadingOverlay = document.getElementById('loading-overlay');
+            loadingOverlay.style.display = 'flex';
+            
+            if (!validatePage(currentPage)) {
+                 showToast("Data belum lengkap untuk kalkulasi.", "error");
+                 loadingOverlay.style.display = 'none';
+                 return;
+            }
+            savePageData(currentPage);
+
+            setTimeout(() => {
+                calculateProjectCosts();
+                loadingOverlay.style.display = 'none';
+                navigate(8);
+            }, 1500);
+        }
+
+        function renderDashboard() {
+            if (Object.keys(projectData).length === 0) return;
+
+            const setText = (id, text) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = text || '';
+            };
+
+            setText('sim-clientName', projectData.clientName);
+            setText('sim-projectName', projectData.projectName);
+            setText('sim-projectLocation', projectData.projectLocation);
+            setText('sim-projectBrief', projectData.projectBrief);
+
+            setText('sim-service-scope', projectData.serviceScope);
+            setText('sim-project-scope', projectData.projectScope);
+            setText('sim-project-category', projectData.projectCategory.substring(3));
+            setText('sim-complexity', projectData.complexity);
+            setText('sim-package', projectData.servicePackage);
+            
+            const costBreakdownEl = document.getElementById('sim-cost-breakdown');
+            if(costBreakdownEl) {
+                costBreakdownEl.innerHTML = '';
+                if (projectData.costBreakdown) {
+                    const { totalArchCost, totalInteriorCost, landscapeCost } = projectData.costBreakdown;
+                    if (totalArchCost > 0) costBreakdownEl.innerHTML += `<li>Arsitektur: <strong>${formatCurrency(totalArchCost)}</strong></li>`;
+                    if (totalInteriorCost > 0) costBreakdownEl.innerHTML += `<li>Interior: <strong>${formatCurrency(totalInteriorCost)}</strong></li>`;
+                    if (landscapeCost > 0) costBreakdownEl.innerHTML += `<li>Lanskap: <strong>${formatCurrency(landscapeCost)}</strong></li>`;
+                } else {
+                     costBreakdownEl.innerHTML += `<li>Biaya Desain: <strong>${formatCurrency(projectData.costs.designFee)}</strong></li>`;
+                }
+                if(projectData.costs.surveyCost > 0) costBreakdownEl.innerHTML += `<li>Biaya Survei: <strong>${formatCurrency(projectData.costs.surveyCost)}</strong></li>`;
+            }
+
+            const paymentTermsEl = document.getElementById('sim-payment-terms');
+            if(paymentTermsEl) {
+                paymentTermsEl.innerHTML = `
+                    <li>Termin 1 (DP 50%): <strong>${formatCurrency(projectData.paymentTerms.termin1.amount)}</strong> <span class="text-xs text-subtle">(${projectData.paymentTerms.termin1.date})</span></li>
+                    <li>Termin 2 (30%): <strong>${formatCurrency(projectData.paymentTerms.termin2.amount)}</strong> <span class="text-xs text-subtle">(${projectData.paymentTerms.termin2.date})</span></li>
+                    <li>Pelunasan (20%): <strong>${formatCurrency(projectData.paymentTerms.termin3.amount)}</strong> <span class="text-xs text-subtle">(${projectData.paymentTerms.termin3.date})</span></li>
+                `;
+            }
+
+            setText('sim-totalCost', formatCurrency(projectData.finalTotalCost));
+            setText('sim-endDate', formatDate(new Date(projectData.endDate)));
+            setText('sim-totalDuration', projectData.totalDuration);
+            
+            if (timelineChart) timelineChart.destroy();
+            if (budgetChart) budgetChart.destroy();
+
+            const ganttCtx = document.getElementById('ganttChart').getContext('2d');
+            const timelineData = projectData.timelineData;
+            const isDarkTheme = document.body.classList.contains('dark');
+            
+            timelineChart = new Chart(ganttCtx, {
+                type: 'bar',
+                data: {
+                    labels: timelineData.map(d => d.label),
+                    datasets: [{
+                        label: 'Durasi (hari)',
+                        data: timelineData.map(d => [d.start, d.end]),
+                        backgroundColor: ['#3b82f6', '#a855f7', '#10b981', '#a855f7', '#f97316', '#eab308', '#ef4444'],
+                        borderWidth: 1,
+                        barPercentage: 0.6,
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            position: 'top',
+                            title: { display: true, text: 'Hari Kerja', color: isDarkTheme ? '#9ca3af' : '#4b5563' },
+                            grid: { color: isDarkTheme ? '#374151' : '#e5e7eb' },
+                            ticks: { color: isDarkTheme ? '#d1d5db' : '#111827' }
+                        },
+                        y: { 
+                            grid: { display: false }, 
+                            ticks: { 
+                                display: true,
+                                color: isDarkTheme ? '#d1d5db' : '#111827',
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const d = timelineData[context.dataIndex];
+                                    return `${context.chart.data.labels[context.dataIndex][0]}: ${d.duration} hari (Hari ke-${d.start} sampai ${d.end})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const donutCtx = document.getElementById('donutChart').getContext('2d');
+            const { designFee, surveyCost, contingencyAmount } = projectData.costs;
+            
+            setText('budget-details', `Subtotal: ${formatCurrency(projectData.costs.subTotal)}`);
+
+            budgetChart = new Chart(donutCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Biaya Desain', 'Biaya Survei', 'Biaya Tak Terduga'],
+                    datasets: [{
+                        data: [designFee, surveyCost, contingencyAmount].filter(v => v > 0),
+                        backgroundColor: ['#2563eb', '#f59e0b', '#6b7280'],
+                        borderColor: isDarkTheme ? '#1f2937' : '#ffffff',
+                        borderWidth: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: isDarkTheme ? '#d1d5db' : '#111827' } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) { label += ': '; }
+                                    if (context.parsed !== null) {
+                                        label += formatCurrency(context.parsed);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function exportToPDF() { /* ... same as before ... */ }
+
+        // --- UTILITY FUNCTIONS ---
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+        }
+        function toggleTheme() {
+            const body = document.body;
+            body.classList.toggle('dark');
+            body.classList.toggle('light');
+            const isDark = body.classList.contains('dark');
+            document.getElementById('theme-icon-light').classList.toggle('hidden', isDark);
+            document.getElementById('theme-icon-dark').classList.toggle('hidden', !isDark);
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            if (currentPage === 8) {
+                renderDashboard();
+            }
+        }
+        function formatDate(date) {
+            if (!(date instanceof Date) || isNaN(date)) { return 'N/A'; }
+            return date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: '2-digit' });
+        }
+        function roundToNearestThousand(num) {
+            return Math.round(num / 1000) * 1000;
+        }
+        function updateInputListeners() {
+            if (projectData.serviceScope) document.querySelector(`#serviceScopeOptions .card[data-value="${projectData.serviceScope}"]`)?.classList.add('glowing-border');
+            if (projectData.projectScope) document.querySelector(`#projectScopeOptions .card[data-value="${projectData.projectScope}"]`)?.classList.add('glowing-border');
+            if (projectData.projectCategory) document.querySelector(`#projectCategoryOptions .card[data-value="${projectData.projectCategory}"]`)?.classList.add('glowing-border');
+            if (projectData.servicePackage) document.querySelector(`#servicePackageOptions .card[data-value="${projectData.servicePackage}"]`)?.classList.add('glowing-border');
+            
+            const actionBtn = document.getElementById(`btn-page${currentPage}-next`) || document.getElementById('btn-page7-action');
+            if (actionBtn) {
+                actionBtn.disabled = !validatePage(currentPage);
+            }
+        }
+        function showToast(message, type = 'success') {
+           const container = document.getElementById('toast-container');
+           const toast = document.createElement('div');
+           toast.className = `toast ${type}`;
+           toast.textContent = message;
+           container.appendChild(toast);
+           setTimeout(() => toast.remove(), 3000);
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.body.className = savedTheme;
+            if (savedTheme === 'dark') {
+                document.getElementById('theme-icon-light').classList.add('hidden');
+                document.getElementById('theme-icon-dark').classList.remove('hidden');
+            }
+            
+            showDashboardView();
+
+            document.body.addEventListener('click', (e) => {
+                const target = e.target;
+                const card = target.closest('.card[data-value]');
+                
+                if(target.closest('#theme-toggle-btn')) toggleTheme();
+                
+                if(target.closest('#initiation-card')) showInitiationView();
+                if(target.closest('#back-to-main-btn')) showDashboardView();
+                if(target.closest('#new-project-card')) showCalculator(true);
+                if(target.closest('#saved-projects-card')) showSavedProjectsView();
+                if(target.closest('#back-to-initiation-btn')) showInitiationView();
+                if(target.closest('#back-to-initiation-from-wizard-btn')) showInitiationView();
+
+                if (card) {
+                    const parent = card.parentElement;
+                    parent.querySelectorAll('.card[data-value]').forEach(c => c.classList.remove('glowing-border'));
+                    card.classList.add('glowing-border');
+                    
+                    const key = parent.id.replace('Options', '');
+                    if(key.includes('param1')){
+                        projectData.complexityTempResult = card.dataset.value;
+                    } else if (key.includes('direct')){
+                        projectData.complexity = card.dataset.value;
+                    } else {
+                        projectData[key] = card.dataset.value;
+                    }
+                    
+                    const nextBtn = document.getElementById(`btn-page${currentPage}-next`);
+                    if(nextBtn) nextBtn.disabled = !validatePage(currentPage);
+                }
+
+                const navActions = {
+                    'btn-page1-next': () => handleNext(2), 'btn-page2-back': () => navigate(1),
+                    'btn-page2-next': handleServiceScopeNext, 'btn-page3-back': () => navigate(2),
+                    'btn-page3-next': handleProjectScopeNext, 'btn-page4-back': () => navigate(3),
+                    'btn-page4-next': handleCategoryNext, 'btn-page5-back': () => navigate(4),
+                    'btn-page5-next': () => handleNext(6), 'btn-page6-back': handlePackageBack,
+                    'btn-page6-next': () => handleNext(7), 'btn-page7-back': handleCalculationBack,
+                    'btn-page7-action': startSimulation,
+                };
+                if (navActions[target.id]) navActions[target.id]();
+                
+                if(target.id === 'edit-params-btn') showCalculator(false);
+                if(target.id === 'export-pdf-btn') exportToPDF();
+                if(target.id === 'save-project-btn') {
+                    showToast("Fitur ini memerlukan database.", "error");
+                }
+                
+                if(target.classList.contains('toggle-examples-btn')) {
+                    e.preventDefault(); e.stopPropagation();
+                    const targetId = target.dataset.target;
+                    const el = document.getElementById(targetId);
+                    if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+                }
+                if(target.id === 'toggle-comparison-btn') {
+                    const container = document.getElementById('comparison-table-container');
+                    const isHidden = container.style.display === 'none';
+                    container.style.display = isHidden ? 'block' : 'none';
+                    target.textContent = isHidden ? 'Sembunyikan Perbandingan Detail ▲' : 'Lihat Perbandingan Detail Paket ▼';
+                }
+
+                if (e.target.id === 'add-architecture-row') {
+                    projectData.architectureItems.push({ type: '', area: 0, floors: 1 });
+                    renderCalculationPage();
+                }
+                if (e.target.id === 'add-interior-row') {
+                    projectData.interiorItems.push({ type: '', area: 0 });
+                    renderCalculationPage();
+                }
+                if (e.target.id === 'add-architectureDuplicates-row') {
+                    projectData.architectureDuplicates.push({ type: '', area: 0, count: 1 });
+                    renderCalculationPage();
+                }
+                if (e.target.id === 'add-interiorDuplicates-row') {
+                    projectData.interiorDuplicates.push({ type: '', area: 0, count: 1 });
+                    renderCalculationPage();
+                }
+                if (e.target.classList.contains('remove-row')) {
+                    const row = e.target.closest('.masterplan-row');
+                    const type = row.dataset.type;
+                    const index = parseInt(row.dataset.index, 10);
+                    projectData[type].splice(index, 1);
+                    renderCalculationPage();
+                }
+            });
+
+            document.body.addEventListener('input', (e) => {
+                 if (e.target.matches('input, textarea, select')) {
+                    const actionBtn = document.getElementById(`btn-page${currentPage}-next`) || document.getElementById('btn-page7-action');
+                    if (actionBtn) {
+                        actionBtn.disabled = !validatePage(currentPage);
+                    }
+                 }
+                 if (e.target.classList.contains('masterplan-input')) {
+                    updateMasterplanData();
+                    updateMasterplanTotals();
+                }
+            });
+        };
+
+        function updateMasterplanData() {
+            projectData.architectureItems = Array.from(document.querySelectorAll('[data-type="architectureItems"]')).map(row => ({
+                type: row.querySelector('[data-field="type"]').value,
+                area: parseFloat(row.querySelector('[data-field="area"]').value) || 0,
+                floors: parseInt(row.querySelector('[data-field="floors"]').value) || 1,
+            }));
+            projectData.interiorItems = Array.from(document.querySelectorAll('[data-type="interiorItems"]')).map(row => ({
+                type: row.querySelector('[data-field="type"]').value,
+                area: parseFloat(row.querySelector('[data-field="area"]').value) || 0,
+            }));
+             projectData.architectureDuplicates = Array.from(document.querySelectorAll('[data-type="architectureDuplicates"]')).map(row => ({
+                type: row.querySelector('[data-field="type"]').value,
+                area: parseFloat(row.querySelector('[data-field="area"]').value) || 0,
+                count: parseInt(row.querySelector('[data-field="count"]').value) || 1,
+            }));
+            projectData.interiorDuplicates = Array.from(document.querySelectorAll('[data-type="interiorDuplicates"]')).map(row => ({
+                type: row.querySelector('[data-field="type"]').value,
+                area: parseFloat(row.querySelector('[data-field="area"]').value) || 0,
+                count: parseInt(row.querySelector('[data-field="count"]').value) || 1,
+            }));
+            projectData.landscapeArea = parseFloat(document.getElementById('landscape-site-area')?.value) || 0;
+        }
+        
+        function updateMasterplanTotals() {
+            let archTotal = projectData.architectureItems.reduce((sum, item) => sum + (item.area * item.floors), 0);
+            let intTotal = projectData.interiorItems.reduce((sum, item) => sum + item.area, 0);
+            let archDupTotal = projectData.architectureDuplicates.reduce((sum, item) => sum + (item.area * item.count), 0);
+            let intDupTotal = projectData.interiorDuplicates.reduce((sum, item) => sum + (item.area * item.count), 0);
+            
+            document.getElementById('arch-subtotal').textContent = archTotal.toLocaleString('id-ID');
+            document.getElementById('int-subtotal').textContent = intTotal.toLocaleString('id-ID');
+            document.getElementById('arch-dup-subtotal').textContent = archDupTotal.toLocaleString('id-ID');
+            document.getElementById('int-dup-subtotal').textContent = intDupTotal.toLocaleString('id-ID');
+
+            const landscapeTotal = Math.max(0, projectData.landscapeArea - archTotal);
+            document.getElementById('landscape-subtotal').textContent = landscapeTotal.toLocaleString('id-ID');
+        }
+
+    </script>
+</body>
+</html>
