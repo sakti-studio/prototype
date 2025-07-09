@@ -27,6 +27,13 @@
       });
   }
 </script>
+          <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('pwabuilder-sw.js')
+      .then(reg => console.log("Service worker registered.", reg))
+      .catch(err => console.error("SW registration failed:", err));
+  }
+</script>
         body {
             font-family: 'Inter', sans-serif;
             transition: background-color 0.3s, color 0.3s;
