@@ -6,6 +6,7 @@
     <title>Sakti Studio - Project Planner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/1.4.0/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,7 +30,7 @@
             to { opacity: 1; transform: translateY(0); }
         }
         .row-item {
-             animation: fadeIn 0.3s;
+            animation: fadeIn 0.3s;
         }
         .row-item.fade-out {
             animation: fadeOut 0.3s forwards;
@@ -59,7 +60,6 @@
         .chart-container {
             position: relative;
             width: 100%;
-            height: 100%;
         }
         #comparison-table-container {
             display: none;
@@ -124,6 +124,7 @@
         .light .input-field:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
         .light .btn-secondary { background-color: #e5e7eb; color: #374151; }
         .light .btn-secondary:hover { background-color: #d1d5db; }
+        .light .btn-filter.active { background-color: #2563eb; color: white; }
         .light .glowing-border { border: 2px solid #2563eb; box-shadow: 0 0 15px 3px rgba(59, 130, 246, 0.6); }
         .light .text-main { color: #111827; }
         .light .text-subtle { color: #6b7280; }
@@ -138,6 +139,7 @@
         .dark .input-field:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); }
         .dark .btn-secondary { background-color: #374151; color: #d1d5db; }
         .dark .btn-secondary:hover { background-color: #4b5563; }
+        .dark .btn-filter.active { background-color: #3b82f6; color: white; }
         .dark .glowing-border { border: 2px solid #93c5fd; box-shadow: 0 0 15px 3px rgba(96, 165, 250, 0.7); }
         .dark .text-main { color: #f9fafb; }
         .dark .text-subtle { color: #9ca3af; }
@@ -145,9 +147,10 @@
         .dark .bg-subtle { background-color: #1f2937; }
 
          @media print {
-            .no-print { display: none !important; }
-            body { background-color: #ffffff; color: #000000; }
-            .card { border: 1px solid #ccc; box-shadow: none; }
+             .no-print { display: none !important; }
+             body { background-color: #ffffff; color: #000000; }
+             .card { border: 1px solid #ccc; box-shadow: none; }
+             #page-8 { padding: 0 !important; }
          }
     </style>
 </head>
@@ -219,6 +222,7 @@
         let currentPage = 1;
         let timelineChart = null;
         let budgetChart = null;
+        let activeTimelineFilter = 'all';
         
         // --- MASTER DATA (Business Logic) ---
         const masterData = {
@@ -449,15 +453,21 @@
                     }
                     break;
                 case 7:
+                    projectData.isExistingBuilding = document.getElementById('isExistingBuilding')?.checked;
+                    projectData.surveyDistance = parseFloat(document.getElementById('surveyDistance')?.value) || 0;
+                    projectData.surveyDays = parseFloat(document.getElementById('surveyDays')?.value) || 0;
+                    projectData.surveyTeamSize = parseFloat(document.getElementById('surveyTeamSize')?.value) || 0;
+                    projectData.droneBatteries = parseFloat(document.getElementById('droneBatteries')?.value) || 0;
+
                     if (projectData.mode === 'Standar') {
                         projectData.buildingArea = parseFloat(document.getElementById('buildingArea')?.value) || 0;
+                        projectData.siteArea = parseFloat(document.getElementById('siteArea')?.value) || 0;
                     } else if (projectData.mode === 'Masterplan') {
                         updateMasterplanData();
                     } else if (projectData.mode === 'Konsultasi') {
                         projectData.consultationDays = parseFloat(document.getElementById('consultationDays')?.value) || 0;
                         projectData.consultants = parseFloat(document.getElementById('consultants')?.value) || 0;
                     }
-                    projectData.contingencyFee = parseFloat(document.getElementById('contingencyFee')?.value) || 10;
                     projectData.startDate = document.getElementById('startDate')?.value || new Date().toISOString().split('T')[0];
                     break;
             }
@@ -608,67 +618,76 @@
                         </div>
                     </div>`,
                 8: `
-                    <div id="page-8" class="step-page w-full max-w-7xl flex-col gap-6 flex p-4 md:p-8">
+                    <div id="page-8" class="step-page w-full max-w-7xl flex-col gap-6 flex p-4 md:p-8 mb-8">
                          <h1 class="text-3xl md:text-4xl font-bold text-center text-main no-print">Simulasi Proyeksi Interaktif</h1>
                          
                          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-                            <div class="card p-4 rounded-lg">
-                                <h3 class="text-lg font-bold mb-2 text-accent">Data Proyek</h3>
-                                <ul class="space-y-1 text-sm">
-                                    <li><strong>Klien:</strong> <span id="sim-clientName"></span></li>
-                                    <li><strong>Proyek:</strong> <span id="sim-projectName"></span></li>
-                                    <li><strong>Lokasi:</strong> <span id="sim-projectLocation"></span></li>
-                                    <li><strong>Ringkasan:</strong> <p id="sim-projectBrief" class="text-xs text-subtle mt-1"></p></li>
-                                </ul>
-                            </div>
-                            <div class="card p-4 rounded-lg">
-                                <h3 class="text-lg font-bold mb-2 text-accent">Parameter Proyek</h3>
-                                <ul class="space-y-1 text-sm">
-                                    <li><strong>Lingkup:</strong> <span id="sim-service-scope"></span></li>
-                                    <li><strong>Skala:</strong> <span id="sim-project-scope"></span></li>
-                                    <li><strong>Kategori:</strong> <span id="sim-project-category"></span></li>
-                                    <li><strong>Kompleksitas:</strong> <span id="sim-complexity"></span></li>
-                                    <li><strong>Paket:</strong> <span id="sim-package" class="font-bold"></span></li>
-                                </ul>
-                            </div>
+                             <div class="card p-4 rounded-lg">
+                                 <h3 class="text-lg font-bold mb-2 text-accent">Data Proyek</h3>
+                                 <ul class="space-y-1 text-sm">
+                                     <li><strong>Klien:</strong> <span id="sim-clientName"></span></li>
+                                     <li><strong>Proyek:</strong> <span id="sim-projectName"></span></li>
+                                     <li><strong>Lokasi:</strong> <span id="sim-projectLocation"></span></li>
+                                     <li><strong>Ringkasan:</strong> <p id="sim-projectBrief" class="text-xs text-subtle mt-1"></p></li>
+                                 </ul>
+                             </div>
+                             <div class="card p-4 rounded-lg">
+                                 <h3 class="text-lg font-bold mb-2 text-accent">Parameter Proyek</h3>
+                                 <ul class="space-y-1 text-sm">
+                                     <li><strong>Lingkup:</strong> <span id="sim-service-scope"></span></li>
+                                     <li><strong>Skala:</strong> <span id="sim-project-scope"></span></li>
+                                     <li><strong>Kategori:</strong> <span id="sim-project-category"></span></li>
+                                     <li><strong>Kompleksitas:</strong> <span id="sim-complexity"></span></li>
+                                     <li><strong>Paket:</strong> <span id="sim-package" class="font-bold"></span></li>
+                                 </ul>
+                             </div>
                          </div>
 
                          <div class="card p-6 rounded-lg flex-grow w-full">
-                            <h3 class="text-xl font-bold mb-4 text-center text-main">Tahap Pengerjaan Proyek</h3>
-                            <div class="chart-container" style="min-height: 450px;">
-                                <canvas id="ganttChart"></canvas>
-                            </div>
+                             <div class="flex flex-col sm:flex-row justify-between items-center mb-4 no-print">
+                                 <h3 class="text-xl font-bold text-center text-main mb-2 sm:mb-0">Tahap Pengerjaan Proyek</h3>
+                                 <div id="timeline-controls" class="flex flex-wrap gap-2">
+                                     <button data-filter="all" class="btn-filter active btn-secondary text-sm px-3 py-1 rounded-md">Semua</button>
+                                     <button data-filter="inisiasi" class="btn-filter btn-secondary text-sm px-3 py-1 rounded-md">Inisiasi</button>
+                                     <button data-filter="konsep" class="btn-filter btn-secondary text-sm px-3 py-1 rounded-md">Konsep</button>
+                                     <button data-filter="finishing" class="btn-filter btn-secondary text-sm px-3 py-1 rounded-md">Finishing</button>
+                                     <button data-filter="closing" class="btn-filter btn-secondary text-sm px-3 py-1 rounded-md">Closing</button>
+                                 </div>
+                             </div>
+                              <div id="gantt-chart-container" class="chart-container">
+                                 <canvas id="ganttChart"></canvas>
+                             </div>
                          </div>
                          
                          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-                            <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                <div class="card p-4 rounded-lg">
-                                    <h3 class="text-lg font-bold mb-2 text-accent">Rincian Biaya Desain</h3>
-                                    <ul id="sim-cost-breakdown" class="space-y-1 text-sm"></ul>
-                                </div>
-                                <div class="card p-4 rounded-lg">
-                                    <h3 class="text-lg font-bold mb-2 text-accent">Jadwal Pembayaran</h3>
-                                    <ul id="sim-payment-terms" class="space-y-1 text-sm"></ul>
-                                </div>
-                            </div>
-                            <div class="card p-6 rounded-lg">
-                                <h3 class="text-xl font-bold mb-2">Total & Alokasi</h3>
-                                <div class="text-center mb-4">
-                                    <p class="text-lg font-semibold text-subtle">Total Biaya (IDR)</p>
-                                    <p id="sim-totalCost" class="text-3xl font-bold text-accent"></p>
-                                    <p class="text-sm font-semibold text-subtle mt-4">Estimasi Selesai: <span id="sim-endDate" class="font-bold"></span></p>
-                                    <p class="text-sm font-semibold text-subtle">Total Durasi: <span id="sim-totalDuration" class="font-bold"></span> Hari</p>
-                                </div>
-                                <div class="chart-container" style="height: 200px;"><canvas id="donutChart"></canvas></div>
-                            </div>
+                             <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                 <div class="card p-4 rounded-lg">
+                                     <h3 class="text-lg font-bold mb-2 text-accent">Rincian Biaya Desain</h3>
+                                     <ul id="sim-cost-breakdown" class="space-y-1 text-sm"></ul>
+                                 </div>
+                                 <div class="card p-4 rounded-lg">
+                                     <h3 class="text-lg font-bold mb-2 text-accent">Jadwal Pembayaran</h3>
+                                     <ul id="sim-payment-terms" class="space-y-1 text-sm"></ul>
+                                 </div>
+                             </div>
+                             <div class="card p-6 rounded-lg">
+                                 <h3 class="text-xl font-bold mb-2">Total & Alokasi</h3>
+                                 <div class="text-center mb-4">
+                                     <p class="text-lg font-semibold text-subtle">Total Biaya (IDR)</p>
+                                     <p id="sim-totalCost" class="text-3xl font-bold text-accent"></p>
+                                     <p class="text-sm font-semibold text-subtle mt-4">Estimasi Selesai: <span id="sim-endDate" class="font-bold"></span></p>
+                                     <p class="text-sm font-semibold text-subtle">Total Durasi: <span id="sim-totalDuration" class="font-bold"></span> Hari</p>
+                                 </div>
+                                 <div class="chart-container" style="height: 200px;"><canvas id="donutChart"></canvas></div>
+                             </div>
                          </div>
 
-                         <div class="w-full flex justify-center gap-4 mt-6 no-print">
-                             <button id="edit-params-btn" class="btn-secondary font-semibold py-3 px-8 rounded-md">Ubah Parameter</button>
-                             <button id="export-pdf-btn" class="btn-secondary font-semibold py-3 px-8 rounded-md">Cetak Proposal (PDF)</button>
-                             <button id="save-project-btn" class="btn-primary font-semibold py-3 px-8 rounded-md">Simpan Proyek</button>
+                         <div id="action-buttons" class="w-full flex justify-center gap-4 mt-6 no-print">
+                               <button id="edit-params-btn" class="btn-secondary font-semibold py-3 px-8 rounded-md">Ubah Parameter</button>
+                               <button id="export-pdf-btn" class="btn-secondary font-semibold py-3 px-8 rounded-md">Cetak Proposal (PDF)</button>
+                               <button id="save-project-btn" class="btn-primary font-semibold py-3 px-8 rounded-md">Simpan Proyek</button>
                          </div>
-                     </div>`
+                    </div>`
             };
             return pages[pageNumber] || `<div>Page ${pageNumber} not found.</div>`;
         }
@@ -702,7 +721,7 @@
                                  </div>
                                  ${opt.examples ? `<button class="toggle-examples-btn text-accent hover:text-blue-500 text-sm w-full text-left mt-4" data-target="examples-${i}">Lihat Contoh Proyek ▼</button>` : ''}
                                  ${examplesHTML}
-                               </div>`;
+                             </div>`;
                 });
                 html += `</div><h3 class="text-lg font-semibold mt-6 mb-2">${definition.param2.label}</h3><div class="space-y-2" id="complexity-param2">`;
                 definition.param2.options.forEach((opt, index) => {
@@ -728,7 +747,7 @@
                                  </div>
                                  ${opt.examples ? `<button class="toggle-examples-btn text-accent hover:text-blue-500 text-sm w-full text-left mt-4" data-target="examples-${i}">Lihat Contoh Proyek ▼</button>` : ''}
                                  ${examplesHTML}
-                               </div>`;
+                             </div>`;
                 });
                 html += `</div>`;
                 container.innerHTML = html;
@@ -740,8 +759,8 @@
             container.innerHTML = '';
             const rangeIndex = projectData.projectScope ? masterData.projectScopeIndex[projectData.projectScope] : 1.0;
             const complexityIdx = (projectData.projectCategory && projectData.complexity && masterData.complexityIndex[projectData.projectCategory]) 
-                                  ? (masterData.complexityIndex[projectData.projectCategory][projectData.complexity] || 1.0) 
-                                  : 1.0;
+                                 ? (masterData.complexityIndex[projectData.projectCategory][projectData.complexity] || 1.0) 
+                                 : 1.0;
 
             ['Basic', 'Plus', 'Premium'].forEach(pkg => {
                 let priceDisplayHTML;
@@ -783,14 +802,10 @@
             let commonFields = `
                 <div class="card p-6 rounded-lg bg-subtle">
                     <h3 class="text-xl font-bold mb-4 text-main">Parameter Tambahan</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 gap-4">
                         <div>
                             <label for="startDate" class="block text-sm font-medium text-subtle">Tanggal Mulai Proyek</label>
                             <input type="date" id="startDate" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.startDate || today}">
-                        </div>
-                        <div>
-                            <label for="contingencyFee" class="block text-sm font-medium text-subtle">Biaya Tak Terduga (%)</label>
-                            <input type="number" id="contingencyFee" placeholder="Contoh: 10" class="mt-1 w-full p-2 rounded-md input-field" value="${projectData.contingencyFee || 10}">
                         </div>
                     </div>
                 </div>`;
@@ -820,7 +835,7 @@
                     </div>
                 </div>
                 <div class="card p-6 rounded-lg bg-subtle">
-                    <h3 class="text-xl font-bold mb-4 text-main">Estimasi Biaya Survei</h3>
+                    <h3 class="text-xl font-bold mb-4 text-main">Estimasi Biaya Survei (Opsional)</h3>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                             <label for="surveyDistance" class="block text-sm font-medium text-subtle">Jarak (km)</label>
@@ -1010,7 +1025,7 @@
                 mode, serviceScope, projectScope, projectCategory, complexity, servicePackage,
                 buildingArea, siteArea, isExistingBuilding,
                 surveyDistance, surveyDays, surveyTeamSize, droneBatteries,
-                consultationDays, consultants, contingencyFee, startDate
+                consultationDays, consultants, startDate
             } = projectData;
 
             let designFee = 0;
@@ -1069,10 +1084,10 @@
                 baseDuration = consultationDays;
             }
             
-            if (mode !== 'Konsultasi' && surveyDays > 0 && surveyTeamSize > 0) {
-                const transport = surveyDistance * 2 * masterData.surveyCosts.transportPerKm;
-                const accommodation = surveyDays * surveyTeamSize * masterData.surveyCosts.dailyPerPerson;
-                const droneCost = droneBatteries * masterData.surveyCosts.dronePerBattery;
+            if (mode !== 'Konsultasi' && (surveyDays || 0) > 0 && (surveyTeamSize || 0) > 0) {
+                const transport = (surveyDistance || 0) * 2 * masterData.surveyCosts.transportPerKm;
+                const accommodation = (surveyDays || 0) * (surveyTeamSize || 0) * masterData.surveyCosts.dailyPerPerson;
+                const droneCost = (droneBatteries || 0) * masterData.surveyCosts.dronePerBattery;
                 surveyCost = transport + accommodation + droneCost;
             }
             
@@ -1080,91 +1095,132 @@
                 surveyCost *= masterData.surveyCosts.existingBuildingIndex;
             }
 
-            const subTotal = designFee + surveyCost;
-            const contingencyAmount = subTotal * (contingencyFee / 100);
-            const finalTotalCost = subTotal + contingencyAmount;
+            const finalTotalCost = designFee + surveyCost;
             
-            const finalDuration = Math.ceil(baseDuration * packageIndex * (1 + (totalBuildingArea / 1000)));
-
+            const designDuration = Math.ceil(baseDuration * packageIndex * (1 + (totalBuildingArea / 1000)));
             const startDateObj = new Date(startDate);
-            const endDateObj = new Date(startDate);
-            endDateObj.setDate(endDateObj.getDate() + finalDuration);
             
+            const { timeline, phaseEndDays } = generateTimelineData(startDateObj, designDuration);
+            
+            const lastPhase = timeline[timeline.length - 1];
+            const finalDuration = lastPhase.end;
+            const endDateObj = new Date(startDate);
+            endDateObj.setDate(endDateObj.getDate() + finalDuration -1);
+
+            const skematikPhase = timeline.find(p => p.name === 'Desain Skematik');
+            const teknisPhase = timeline.find(p => p.name === 'Dokumentasi Teknis (DED+MEP)');
+
+            const dpDay = skematikPhase ? skematikPhase.start : 7;
+            const termin2Day = teknisPhase ? teknisPhase.start : (phaseEndDays['Buffer / Waktu Cadangan'] || finalDuration * 0.75);
+            const pelunasanDay = teknisPhase ? teknisPhase.end : finalDuration;
+
+            const dpDate = new Date(startDate);
+            dpDate.setDate(dpDate.getDate() + dpDay);
+
             const termin2Date = new Date(startDate);
-            termin2Date.setDate(termin2Date.getDate() + Math.round(finalDuration * 0.5));
+            termin2Date.setDate(termin2Date.getDate() + termin2Day);
+
+            const pelunasanDate = new Date(startDate);
+            pelunasanDate.setDate(pelunasanDate.getDate() + pelunasanDay);
+
             projectData.paymentTerms = {
-                termin1: { date: formatDate(startDateObj), amount: finalTotalCost * 0.5 },
+                termin1: { date: formatDate(dpDate), amount: finalTotalCost * 0.5 },
                 termin2: { date: formatDate(termin2Date), amount: finalTotalCost * 0.3 },
-                termin3: { date: formatDate(endDateObj), amount: finalTotalCost * 0.2 },
+                termin3: { date: formatDate(pelunasanDate), amount: finalTotalCost * 0.2 },
             };
 
-            projectData.costs = { designFee, surveyCost, contingencyAmount, subTotal };
+            projectData.paymentMilestones = [
+                { day: dpDay, label: 'Termin 1 (DP)', date: projectData.paymentTerms.termin1.date },
+                { day: termin2Day, label: 'Termin 2', date: projectData.paymentTerms.termin2.date },
+                { day: pelunasanDay, label: 'Pelunasan', date: projectData.paymentTerms.termin3.date }
+            ];
+
+            projectData.costs = { designFee, surveyCost, packageIndex, rangeIndex, complexityIdx };
             projectData.finalTotalCost = roundToNearestThousand(finalTotalCost);
             projectData.totalDuration = finalDuration;
             projectData.endDate = endDateObj.toISOString().split('T')[0];
-            projectData.timelineData = generateTimelineData(startDateObj, finalDuration);
+            projectData.timelineData = timeline;
         }
         
-        function generateTimelineData(startDate, totalDuration) {
-            const phases = [
-                { name: 'Desain Skematik', ratio: 0.20, fixed: 0 },
-                { name: 'Asistensi Klien 1', ratio: 0, fixed: 4 },
-                { name: 'Desain Development (3D)', ratio: 0.20, fixed: 0 },
-                { name: 'Asistensi Klien 2', ratio: 0, fixed: 4 },
-                { name: 'Dokumentasi Teknis (DED+MEP)', ratio: 0.25, fixed: 0, depends: null },
-                { name: 'RAB', ratio: 0.10, fixed: 0, depends: 'Dokumentasi Teknis (DED+MEP)', offset: 1 },
-                { name: 'Rendering Final', ratio: 0.15, fixed: 0, depends: 'Dokumentasi Teknis (DED+MEP)', offset: 0 },
+        function generateTimelineData(startDate, designDuration) {
+            const designPhases = [
+                { name: 'Desain Skematik',             ratio: 0.15, depends: 'Pengajuan Proposal', group: 'konsep' },
+                { name: 'Asistensi Klien 1',           ratio: 0.05, depends: 'Desain Skematik', group: 'konsep' },
+                { name: 'Revisi 1',                    ratio: 0.10, depends: 'Asistensi Klien 1', group: 'konsep' },
+                { name: 'Desain Development (3D)',     ratio: 0.25, depends: 'Revisi 1', group: 'konsep' },
+                { name: 'Asistensi Klien 2',           ratio: 0.05, depends: 'Desain Development (3D)', group: 'konsep' },
+                { name: 'Revisi 2',                    ratio: 0.10, depends: 'Asistensi Klien 2', group: 'konsep' },
+                { name: 'Buffer / Waktu Cadangan',     ratio: 0.05, depends: 'Revisi 2', group: 'konsep' },
+                { name: 'Dokumentasi Teknis (DED+MEP)',ratio: 0.25, depends: 'Buffer / Waktu Cadangan', group: 'finishing' },
+                { name: 'RAB',                         ratio: 0.10, depends: 'Buffer / Waktu Cadangan', group: 'finishing' },
+                { name: 'Rendering Final',             ratio: 0.15, depends: 'Buffer / Waktu Cadangan', group: 'finishing' },
             ];
 
-            const fixedDuration = phases.reduce((sum, p) => sum + p.fixed, 0);
-            const remainingDuration = totalDuration - fixedDuration;
-            const remainingRatioSum = phases.reduce((sum, p) => sum + p.ratio, 0);
-            
-            let cumulativeDuration = 0;
-            const results = {};
+            const allPhases = [];
+            const phaseEndDays = {};
 
-            phases.forEach(phase => {
-                if (phase.depends === null || !results[phase.depends]) {
-                    const duration = phase.fixed > 0 ? phase.fixed : Math.round(remainingDuration * (phase.ratio / remainingRatioSum));
-                    const start = cumulativeDuration;
-                    const end = start + duration;
-                    
-                    const phaseStartDate = new Date(startDate);
-                    phaseStartDate.setDate(phaseStartDate.getDate() + start);
-                    const phaseEndDate = new Date(startDate);
-                    phaseEndDate.setDate(phaseEndDate.getDate() + end);
+            // 1. Proposal Phase
+            const proposalDuration = 7;
+            const proposalStartDate = new Date(startDate);
+            const proposalEndDate = new Date(startDate);
+            proposalEndDate.setDate(proposalEndDate.getDate() + proposalDuration - 1);
+            allPhases.push({
+                name: 'Pengajuan Proposal',
+                label: ['Pengajuan Proposal', `(${formatDate(proposalStartDate)} - ${formatDate(proposalEndDate)} | ${proposalDuration} hari)`],
+                start: 0,
+                end: proposalDuration,
+                duration: proposalDuration,
+                group: 'inisiasi'
+            });
+            phaseEndDays['Pengajuan Proposal'] = proposalDuration;
 
-                    results[phase.name] = {
-                        label: [phase.name, `(${formatDate(phaseStartDate)} - ${formatDate(phaseEndDate)} | ${duration} hari)`],
-                        start,
-                        end,
-                        duration
-                    };
-                    cumulativeDuration = end;
-                }
+            // 2. Design Phases
+            designPhases.forEach(phase => {
+                const startDay = phaseEndDays[phase.depends] || proposalDuration;
+                const duration = Math.max(1, Math.round(designDuration * phase.ratio));
+                const endDay = startDay + duration;
+
+                const phaseStartDate = new Date(startDate);
+                phaseStartDate.setDate(phaseStartDate.getDate() + startDay);
+                const phaseEndDate = new Date(startDate);
+                phaseEndDate.setDate(phaseEndDate.getDate() + endDay - 1);
+
+                allPhases.push({
+                    name: phase.name,
+                    label: [phase.name, `(${formatDate(phaseStartDate)} - ${formatDate(phaseEndDate)} | ${duration} hari)`],
+                    start: startDay,
+                    end: endDay,
+                    duration: duration,
+                    group: phase.group
+                });
+                
+                phaseEndDays[phase.name] = endDay;
             });
 
-            phases.forEach(phase => {
-                 if (phase.depends && results[phase.depends]) {
-                    const duration = phase.fixed > 0 ? phase.fixed : Math.round(remainingDuration * (phase.ratio / remainingRatioSum));
-                    const start = results[phase.depends].start + (phase.offset || 0);
-                    const end = start + duration;
+            // 3. Find latest end day from all design phases for closing phase dependency
+            const lastDesignDay = Math.max(
+                phaseEndDays['Dokumentasi Teknis (DED+MEP)'],
+                phaseEndDays['RAB'],
+                phaseEndDays['Rendering Final']
+            );
 
-                    const phaseStartDate = new Date(startDate);
-                    phaseStartDate.setDate(phaseStartDate.getDate() + start);
-                    const phaseEndDate = new Date(startDate);
-                    phaseEndDate.setDate(phaseEndDate.getDate() + end);
-
-                    results[phase.name] = {
-                        label: [phase.name, `(${formatDate(phaseStartDate)} - ${formatDate(phaseEndDate)} | ${duration} hari)`],
-                        start,
-                        end,
-                        duration
-                    };
-                 }
+            // 4. Closing Phase
+            const closingDuration = 7;
+            const closingStartDate = new Date(startDate);
+            closingStartDate.setDate(closingStartDate.getDate() + lastDesignDay);
+            const closingEndDate = new Date(closingStartDate);
+            closingEndDate.setDate(closingEndDate.getDate() + closingDuration - 1);
+            allPhases.push({
+                name: 'Project Closing',
+                label: ['Project Closing', `(${formatDate(closingStartDate)} - ${formatDate(closingEndDate)} | ${closingDuration} hari)`],
+                start: lastDesignDay,
+                end: lastDesignDay + closingDuration,
+                duration: closingDuration,
+                group: 'closing'
             });
+            phaseEndDays['Project Closing'] = lastDesignDay + closingDuration;
 
-            return Object.values(results);
+            return { timeline: allPhases, phaseEndDays };
         }
 
         function startSimulation(){
@@ -1192,6 +1248,11 @@
                 const el = document.getElementById(id);
                 if (el) el.textContent = text || '';
             };
+            
+            const setHTML = (id, html) => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = html || '';
+            }
 
             setText('sim-clientName', projectData.clientName);
             setText('sim-projectName', projectData.projectName);
@@ -1206,16 +1267,26 @@
             
             const costBreakdownEl = document.getElementById('sim-cost-breakdown');
             if(costBreakdownEl) {
-                costBreakdownEl.innerHTML = '';
-                if (projectData.costBreakdown) {
+                let breakdownHTML = '';
+                const { designFee, surveyCost, packageIndex, rangeIndex, complexityIdx } = projectData.costs;
+
+                if (projectData.mode === 'Standar') {
+                    breakdownHTML += `<li>Biaya Desain: <strong>${formatCurrency(designFee)}</strong></li>`;
+                    breakdownHTML += `<li class="text-xs text-subtle pl-4">(${projectData.buildingArea}m² x ${formatCurrency(masterData.basePriceArsitektur)} x ${packageIndex} x ${rangeIndex} x ${complexityIdx})</li>`;
+                } else if (projectData.mode === 'Masterplan') {
                     const { totalArchCost, totalInteriorCost, landscapeCost } = projectData.costBreakdown;
-                    if (totalArchCost > 0) costBreakdownEl.innerHTML += `<li>Arsitektur: <strong>${formatCurrency(totalArchCost)}</strong></li>`;
-                    if (totalInteriorCost > 0) costBreakdownEl.innerHTML += `<li>Interior: <strong>${formatCurrency(totalInteriorCost)}</strong></li>`;
-                    if (landscapeCost > 0) costBreakdownEl.innerHTML += `<li>Lanskap: <strong>${formatCurrency(landscapeCost)}</strong></li>`;
-                } else {
-                     costBreakdownEl.innerHTML += `<li>Biaya Desain: <strong>${formatCurrency(projectData.costs.designFee)}</strong></li>`;
+                    if (totalArchCost > 0) breakdownHTML += `<li>Arsitektur: <strong>${formatCurrency(totalArchCost)}</strong></li>`;
+                    if (totalInteriorCost > 0) breakdownHTML += `<li>Interior: <strong>${formatCurrency(totalInteriorCost)}</strong></li>`;
+                    if (landscapeCost > 0) breakdownHTML += `<li>Lanskap: <strong>${formatCurrency(landscapeCost)}</strong></li>`;
+                } else if (projectData.mode === 'Konsultasi') {
+                    breakdownHTML += `<li>Biaya Konsultasi: <strong>${formatCurrency(designFee)}</strong></li>`;
+                    breakdownHTML += `<li class="text-xs text-subtle pl-4">(${projectData.consultationDays} hari x ${projectData.consultants} org x ${formatCurrency(masterData.surveyCosts.dailyPerPerson)})</li>`;
                 }
-                if(projectData.costs.surveyCost > 0) costBreakdownEl.innerHTML += `<li>Biaya Survei: <strong>${formatCurrency(projectData.costs.surveyCost)}</strong></li>`;
+                
+                if(surveyCost > 0) {
+                    breakdownHTML += `<li>Biaya Survei: <strong>${formatCurrency(surveyCost)}</strong></li>`;
+                }
+                setHTML('sim-cost-breakdown', breakdownHTML);
             }
 
             const paymentTermsEl = document.getElementById('sim-payment-terms');
@@ -1231,75 +1302,21 @@
             setText('sim-endDate', formatDate(new Date(projectData.endDate)));
             setText('sim-totalDuration', projectData.totalDuration);
             
-            if (timelineChart) timelineChart.destroy();
             if (budgetChart) budgetChart.destroy();
 
-            const ganttCtx = document.getElementById('ganttChart').getContext('2d');
-            const timelineData = projectData.timelineData;
-            const isDarkTheme = document.body.classList.contains('dark');
-            
-            timelineChart = new Chart(ganttCtx, {
-                type: 'bar',
-                data: {
-                    labels: timelineData.map(d => d.label),
-                    datasets: [{
-                        label: 'Durasi (hari)',
-                        data: timelineData.map(d => [d.start, d.end]),
-                        backgroundColor: ['#3b82f6', '#a855f7', '#10b981', '#a855f7', '#f97316', '#eab308', '#ef4444'],
-                        borderWidth: 1,
-                        barPercentage: 0.6,
-                        borderRadius: 4,
-                        borderSkipped: false,
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            position: 'top',
-                            title: { display: true, text: 'Hari Kerja', color: isDarkTheme ? '#9ca3af' : '#4b5563' },
-                            grid: { color: isDarkTheme ? '#374151' : '#e5e7eb' },
-                            ticks: { color: isDarkTheme ? '#d1d5db' : '#111827' }
-                        },
-                        y: { 
-                            grid: { display: false }, 
-                            ticks: { 
-                                display: true,
-                                color: isDarkTheme ? '#d1d5db' : '#111827',
-                                font: {
-                                    size: 11
-                                }
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const d = timelineData[context.dataIndex];
-                                    return `${context.chart.data.labels[context.dataIndex][0]}: ${d.duration} hari (Hari ke-${d.start} sampai ${d.end})`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+            updateGanttChart();
 
             const donutCtx = document.getElementById('donutChart').getContext('2d');
-            const { designFee, surveyCost, contingencyAmount } = projectData.costs;
+            const { designFee, surveyCost } = projectData.costs;
+            const isDarkTheme = document.body.classList.contains('dark');
             
-            setText('budget-details', `Subtotal: ${formatCurrency(projectData.costs.subTotal)}`);
-
             budgetChart = new Chart(donutCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Biaya Desain', 'Biaya Survei', 'Biaya Tak Terduga'],
+                    labels: ['Biaya Desain', 'Biaya Survei'],
                     datasets: [{
-                        data: [designFee, surveyCost, contingencyAmount].filter(v => v > 0),
-                        backgroundColor: ['#2563eb', '#f59e0b', '#6b7280'],
+                        data: [designFee, surveyCost].filter(v => v > 0),
+                        backgroundColor: ['#2563eb', '#f59e0b'],
                         borderColor: isDarkTheme ? '#1f2937' : '#ffffff',
                         borderWidth: 4,
                     }]
@@ -1327,7 +1344,226 @@
             });
         }
 
-        async function exportToPDF() { /* ... same as before ... */ }
+        function updateGanttChart() {
+            if (timelineChart) {
+                timelineChart.destroy();
+            }
+
+            const ganttContainer = document.getElementById('gantt-chart-container');
+            const ganttCtx = document.getElementById('ganttChart').getContext('2d');
+            const isDarkTheme = document.body.classList.contains('dark');
+
+            const filteredData = activeTimelineFilter === 'all' 
+                ? projectData.timelineData 
+                : projectData.timelineData.filter(d => d.group === activeTimelineFilter);
+
+            const chartHeight = filteredData.length * 40 + 60;
+            ganttContainer.style.height = `${chartHeight}px`;
+
+            const paymentMilestones = projectData.paymentMilestones || [];
+            const milestoneAnnotations = paymentMilestones.reduce((acc, milestone) => {
+                let yValue = -1;
+                if (milestone.label.includes('Termin 1')) {
+                    yValue = filteredData.findIndex(p => p.name === 'Desain Skematik');
+                } else if (milestone.label.includes('Termin 2')) {
+                    yValue = filteredData.findIndex(p => p.name === 'Dokumentasi Teknis (DED+MEP)');
+                } else if (milestone.label.includes('Pelunasan')) {
+                    yValue = filteredData.findIndex(p => p.name === 'Dokumentasi Teknis (DED+MEP)');
+                }
+                
+                if (yValue !== -1) { 
+                    acc[`milestone-${milestone.day}`] = {
+                        type: 'line',
+                        xMin: milestone.day,
+                        xMax: milestone.day,
+                        borderColor: 'rgba(225, 29, 72, 0.8)',
+                        borderWidth: 1.5,
+                        borderDash: [5, 5],
+                        label: {
+                            content: milestone.label,
+                            enabled: true,
+                            position: 'start',
+                            backgroundColor: 'rgba(225, 29, 72, 0.8)',
+                            color: 'white',
+                            font: { size: 9, weight: 'bold' },
+                            yAdjust: -15,
+                            padding: 4,
+                            borderRadius: 4
+                        },
+                        point: {
+                            type: 'point',
+                            xValue: milestone.day,
+                            yValue: yValue,
+                            backgroundColor: '#e11d48',
+                            radius: 5,
+                            borderWidth: 2,
+                            borderColor: isDarkTheme ? '#1f2937' : '#ffffff',
+                        }
+                    };
+                }
+                return acc;
+            }, {});
+
+            timelineChart = new Chart(ganttCtx, {
+                type: 'bar',
+                data: {
+                    labels: filteredData.map(d => d.label),
+                    datasets: [{
+                        label: 'Durasi Proyek',
+                        data: filteredData.map(d => [d.start, d.end]),
+                        backgroundColor: (context) => {
+                            const group = filteredData[context.dataIndex].group;
+                            if (group === 'inisiasi') return '#64748b';
+                            if (group === 'konsep') return '#3b82f6';
+                            if (group === 'finishing') return '#10b981';
+                            if (group === 'closing') return '#f97316';
+                            return '#a855f7';
+                        },
+                        borderWidth: 1,
+                        barPercentage: 0.6,
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            // --- [FIX] Increased left padding ---
+                            left: 200 
+                        }
+                    },
+                    scales: {
+                        x: {
+                            position: 'top',
+                            title: { display: true, text: 'Hari Kerja', color: isDarkTheme ? '#9ca3af' : '#4b5563' },
+                            grid: { color: isDarkTheme ? '#374151' : '#e5e7eb' },
+                            ticks: { color: isDarkTheme ? '#d1d5db' : '#111827' }
+                        },
+                        y: { 
+                            grid: { display: false }, 
+                            ticks: { 
+                                display: false, 
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        annotation: {
+                            annotations: milestoneAnnotations,
+                            drawTime: 'afterDatasetsDraw'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const d = filteredData[context.dataIndex];
+                                    const labelText = Array.isArray(d.label) ? d.label[0] : d.label;
+                                    return `${labelText}: ${d.duration} hari (Hari ke-${d.start + 1} s/d ${d.end})`;
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    id: 'customGanttLabels',
+                    afterDraw: (chart) => {
+                        const { ctx, chartArea: { left }, scales: { y } } = chart;
+                        ctx.save();
+                        
+                        y.ticks.forEach((tick, index) => {
+                            const yPos = y.getPixelForTick(index);
+                            const label = chart.data.labels[index];
+                            
+                            if (Array.isArray(label) && label.length > 1) {
+                                // --- [FIX] Draw labels to the far left of the chart area ---
+                                const labelXPosition = 10; // Start drawing 10px from the edge
+
+                                // Draw Title (Bold)
+                                ctx.font = '600 11px Inter';
+                                ctx.fillStyle = isDarkTheme ? '#f9fafb' : '#111827';
+                                ctx.textAlign = 'left';
+                                ctx.fillText(label[0], labelXPosition, yPos - 5);
+
+                                // Draw Subtitle (Grey, smaller)
+                                ctx.font = '400 10px Inter';
+                                ctx.fillStyle = isDarkTheme ? '#9ca3af' : '#6b7280';
+                                ctx.fillText(label[1], labelXPosition, yPos + 10);
+                            }
+                        });
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        async function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const reportElement = document.getElementById('page-8');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const actionButtons = document.getElementById('action-buttons');
+            
+            loadingOverlay.style.display = 'flex';
+            document.getElementById('loading-text').textContent = 'Mempersiapkan PDF...';
+            
+            actionButtons.style.display = 'none';
+            reportElement.style.maxWidth = 'none';
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            try {
+                const canvas = await html2canvas(reportElement, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: document.body.classList.contains('dark') ? '#111827' : '#f3f4f6',
+                    onclone: (doc) => {
+                        doc.querySelectorAll('canvas').forEach((canvas) => {
+                            const chartInstance = Chart.getChart(canvas);
+                            if (chartInstance) {
+                                const dataUrl = chartInstance.toBase64Image();
+                                const img = doc.createElement('img');
+                                img.src = dataUrl;
+                                img.style.width = canvas.style.width;
+                                img.style.height = canvas.style.height;
+                                canvas.parentNode.replaceChild(img, canvas);
+                            }
+                        });
+                    }
+                });
+
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const imgProps = pdf.getImageProperties(imgData);
+                const imgRatio = imgProps.width / imgProps.height;
+                let imgHeight = pdfWidth / imgRatio;
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                heightLeft -= pdfHeight;
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+                    heightLeft -= pdfHeight;
+                }
+                
+                pdf.save(`Proposal - ${projectData.projectName || 'Proyek Baru'}.pdf`);
+                showToast('PDF berhasil dibuat!', 'success');
+
+            } catch (err) {
+                showToast('Gagal membuat PDF.', 'error');
+                console.error("Error creating PDF:", err);
+            } finally {
+                reportElement.style.maxWidth = '';
+                actionButtons.style.display = '';
+                loadingOverlay.style.display = 'none';
+            }
+        }
 
         // --- UTILITY FUNCTIONS ---
         function formatCurrency(value) {
@@ -1374,6 +1610,8 @@
 
         // --- INITIALIZATION ---
         window.onload = () => {
+            Chart.register(window['chartjs-plugin-annotation']);
+
             const savedTheme = localStorage.getItem('theme') || 'light';
             document.body.className = savedTheme;
             if (savedTheme === 'dark') {
@@ -1412,6 +1650,13 @@
                     
                     const nextBtn = document.getElementById(`btn-page${currentPage}-next`);
                     if(nextBtn) nextBtn.disabled = !validatePage(currentPage);
+                }
+
+                if(target.classList.contains('btn-filter')) {
+                    document.querySelectorAll('.btn-filter').forEach(btn => btn.classList.remove('active'));
+                    target.classList.add('active');
+                    activeTimelineFilter = target.dataset.filter;
+                    updateGanttChart();
                 }
 
                 const navActions = {
@@ -1471,15 +1716,15 @@
 
             document.body.addEventListener('input', (e) => {
                  if (e.target.matches('input, textarea, select')) {
-                    const actionBtn = document.getElementById(`btn-page${currentPage}-next`) || document.getElementById('btn-page7-action');
-                    if (actionBtn) {
-                        actionBtn.disabled = !validatePage(currentPage);
-                    }
+                      const actionBtn = document.getElementById(`btn-page${currentPage}-next`) || document.getElementById('btn-page7-action');
+                      if (actionBtn) {
+                          actionBtn.disabled = !validatePage(currentPage);
+                      }
                  }
                  if (e.target.classList.contains('masterplan-input')) {
-                    updateMasterplanData();
-                    updateMasterplanTotals();
-                }
+                      updateMasterplanData();
+                      updateMasterplanTotals();
+                 }
             });
         };
 
